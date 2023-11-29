@@ -41,7 +41,9 @@ def read_inventory(inventory_file_path):
             device_info = item.strip().split(',') 
             device = {'ipaddr': device_info[0],
                       'type':   device_info[1],
-                      'name':   device_info[2]}
+                      'name':   device_info[2],
+                      'target-version': device_info[3]
+                      }
             # Each dictionary object is uniquely identified using hostname.
             devices[device["name"]] = device
     return devices
@@ -80,13 +82,6 @@ def verify_md5(net_connect,file,md5):
         print(f"({device['name']}) Error: Image verification failed.")
         result = False
     return md5_verified
-
-def cleanup(net_connect):
-    """
-    Removes all unused / old software images.
-    """
-    net_connect.send_command('install remove inactive', read_timeout=300)
-    net_connect.send_command('y', expect_string='Do you want to remove the above files?')
 
 def verify_space_iosxe(net_connect,file):
     """
@@ -163,20 +158,47 @@ def software_install(net_connect,file):
     """
     print(f"({device['name']}) Starting to install the new image.")
     try:
+        # print(f"({device['name']}) Saving configuration.")
+        # net_connect.send_command('write memory')
+        # print(f"({device['name']}) Activating the new image.")
+        # net_connect.send_command(f'install add file flash:{file} activate commit',
+        #                         read_timeout=660,
+        #                         expect_string=r"This operation may require a reload of the system. Do you want to proceed"
+        #                         )
+        # print(f"({device['name']}) Success: The new image was activated.")
+        # net_connect.send_command('y')
+        # print(f"({device['name']}) Success: Reload was approved.")
+        # print(f"({device['name']}) Success: New image activated. Reloading.")
+
         print(f"({device['name']}) Saving configuration.")
         net_connect.send_command('write memory')
-        print(f"({device['name']}) Activating the new image.")
-        net_connect.send_command(f'install add file flash:{file} activate commit',
-                                read_timeout=660,
-                                expect_string=r"This operation requires a reload of the system. Do you want to proceed"
-                                )
-        print(f"({device['name']}) Success: The new image was activated.")
+        print(f"({device['name']}) Adding the new image.")
+        net_connect.send_command(f'install add file flash:{file}',
+                                 read_timeout=660)
+        print(f"({device['name']}) Success: The new image was added.")
+        net_connect.send_command(f'install ativate',
+                                 read_timeout=660,
+                                 expect_string=r"This operation may require a reload of the system. Do you want to proceed"
+                                 )
         net_connect.send_command('y')
-        print(f"({device['name']}) Success: Reload was confirmed.")
+        print(f"({device['name']}) Success: Reload was approved.")
         print(f"({device['name']}) Success: New image activated. Reloading.")
+
     except Exception as err:
         print(f"({device['name']}) Error: Upgrade failed: {err}")
         exit(1)
+
+def upgrade_image(net_connect, device):
+    md5 = check_md5(device["target-version"])
+    md5_verified = verify_md5(net_connect,device["target-version"],md5)
+
+    if md5_verified:
+        try:
+            software_install(net_connect,device["target-version"])
+        except Exception as err:
+            print(err)
+    else:
+        print(f"({device['name']}) Error: Aborting the upgrade.")
 
 def command_worker(device, creds):
     # Check that the device has been defined as IOS-XE device in the inventory.
@@ -196,59 +218,34 @@ def command_worker(device, creds):
             exit(1)
         
         print(f"({device['name']}) Connecting to device.")
-        print (f"({device['name']}) Preparing to upload image: {sw_image_file_path}")
-        enough_space, image_exists = verify_space_iosxe(net_connect,sw_image_file_path)
+        print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
+        enough_space, image_exists = verify_space_iosxe(net_connect,device["target-version"])
         
         if enough_space == 'True' and image_exists == 'False':
             print(f"({device['name']}) Success: Device has space and image doesn't exist.")
             
             # Upload the image to the device.
             try:
-                copy_upgrade_image(net_connect, sw_image_file_path, username, password)
+                copy_upgrade_image(net_connect, device["target-version"], username, password)
             except Exception as err:
                 print(err)
                 exit(1)
 
-            # Verify the image integrity.
-            md5 = check_md5(sw_image_file_path)
-            md5_verified = verify_md5(net_connect,sw_image_file_path,md5)
-
-            if md5_verified:
-                try:
-                    software_install(net_connect,sw_image_file_path)
-                except Exception as err:
-                    print(err)
-            else:
-                print(f"({device['name']}) Error: Aborting the upgrade.")
-                
+            upgrade_image(net_connect, device)
 
         elif enough_space == 'False':
-            print(f"({device['name']}) Error: Not enough space.")
-
+            print(f"({device['name']}) Error: Not enough space. Try 'install",
+                "remove inactive' on the device.")
 
         elif image_exists == 'True':
             print(f"({device['name']}) Target image exists.")
-            md5 = check_md5(sw_image_file_path)
-            md5_verified = verify_md5(net_connect,sw_image_file_path,md5)
-
-            if md5_verified:
-                try:
-                    software_install(net_connect,sw_image_file_path)
-                except Exception as err:
-                    print(err)
-            else:
-                print(f"({device['name']}) Error: Aborting the upgrade.")
+            upgrade_image(net_connect, device)
        
         net_connect.disconnect()
 
     else:                             
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         exit(1)
-
-        # try:
-        #     software_install(net_connect,sw_image_file_path)
-        # except Exception as err:
-        #     print(err)
 
 # EXECUTION
 
@@ -260,14 +257,10 @@ if os.path.isfile('netmiko_global.log'):
 logging.basicConfig(filename='netmiko_global.log', level=logging.DEBUG)
 logger = logging.getLogger("netmiko")
 
-#inventory_file_path = input("Inventory file path: ")
-#sw_image_file_path = input("IOS-XE image Path: ")
 print('\n---- Credentials, Inventory and Image  ----\n')
 username = input("Management username: ")
 password = getpass.getpass(prompt ="Management password: ")
-
 inventory_file_path = "inventory.csv"
-sw_image_file_path = "cat9k_lite_iosxe.17.09.04a.SPA.bin"
 
 print_inventory(inventory_file_path)
 inventory = read_inventory(inventory_file_path)
