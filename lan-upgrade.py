@@ -259,11 +259,12 @@ print('\n---- Enable multithreading ----\n')
 config_threads_list = []
 for ipaddr,device in inventory.items():
      print(f"({device['name']}) Creating a thread.")
+     # The name of the thread is the name of the device being configured.
      config_threads_list.append(threading.Thread(target=upgrade_process, name=device['name'], args=(device, username, password)))
 
+
+# Start threads.
 print('\n---- Begin running command threading ----\n')
 for thread in config_threads_list:
     thread.start()
-
-for thread in config_threads_list:
     thread.join()
