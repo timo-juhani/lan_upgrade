@@ -1,2 +1,8 @@
 # Production inventory
-./inventory
+inventory.csv
+
+# Software upgrade binaries
+cat*.bin
+
+# Netmiko logs
+netmiko_global.log
