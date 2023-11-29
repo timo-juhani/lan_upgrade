@@ -41,7 +41,7 @@ def verify_md5(net_connect,file,md5):
     return result
 
 def software_install(net_connect,file):
-    """
+    """ 
     Send the update command.
     """
     net_connect.send_command('wr')
@@ -137,11 +137,10 @@ def read_devices( devices_filename ):
     return devices
 
 def command_worker( device, creds ):
-
-#---- Connect to the device ----
-    if   device['type'] == 'cisco-ios': device_type = 'cisco_ios'
-    elif device['type'] == 'cisco-xe': device_type = 'cisco_xe'
-    else:                              device_type = 'cisco_ios'   # attempt Cisco IOS as default
+    if device['type'] == 'cisco-xe': 
+        device_type = 'cisco_xe'
+    else:                             
+        print (f"Device type {device_type} not supported.")
 
     print ('---- Connecting to device {0}, username={1}, password={2}'.format( device['ipaddr'],
                                                                                 creds[0], creds[1] ))
@@ -186,9 +185,6 @@ def command_worker( device, creds ):
 
         elif ver[1] == 'True':
             print ("\n\nFile already uploaded on device ... %s \n\n" %(device['ipaddr']))
-
-    else:
-        print (f"Device type {device_type} not supported.")
       
     session.disconnect()
 
