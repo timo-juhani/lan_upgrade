@@ -154,29 +154,20 @@ def copy_upgrade_image(net_connect, file, username, password):
 
 def software_install(net_connect,file):
     """ 
-    Send the update command.
+    Install the IOS-XE software in two phases. Saves the running configuration 
+    then moves to add a new image using install add command then finally applies
+    the new image using install activate command. The reload is auto-approved 
+    after activation has compeleted.
     """
     print(f"({device['name']}) Starting to install the new image.")
     try:
-        # print(f"({device['name']}) Saving configuration.")
-        # net_connect.send_command('write memory')
-        # print(f"({device['name']}) Activating the new image.")
-        # net_connect.send_command(f'install add file flash:{file} activate commit',
-        #                         read_timeout=660,
-        #                         expect_string=r"This operation may require a reload of the system. Do you want to proceed"
-        #                         )
-        # print(f"({device['name']}) Success: The new image was activated.")
-        # net_connect.send_command('y')
-        # print(f"({device['name']}) Success: Reload was approved.")
-        # print(f"({device['name']}) Success: New image activated. Reloading.")
-
         print(f"({device['name']}) Saving configuration.")
-        net_connect.send_command('write memory')
+        net_connect.send_command('write memory', read_timeout=60)
         print(f"({device['name']}) Adding the new image.")
         net_connect.send_command(f'install add file flash:{file}',
                                  read_timeout=660)
         print(f"({device['name']}) Success: The new image was added.")
-        net_connect.send_command(f'install ativate',
+        net_connect.send_command(f'install activate',
                                  read_timeout=660,
                                  expect_string=r"This operation may require a reload of the system. Do you want to proceed"
                                  )
@@ -185,7 +176,7 @@ def software_install(net_connect,file):
         print(f"({device['name']}) Success: New image activated. Reloading.")
 
     except Exception as err:
-        print(f"({device['name']}) Error: Upgrade failed: {err}")
+        print(f"({device['name']}) Error: Install failed: {err}")
         exit(1)
 
 def upgrade_image(net_connect, device):
@@ -222,15 +213,8 @@ def command_worker(device, creds):
         enough_space, image_exists = verify_space_iosxe(net_connect,device["target-version"])
         
         if enough_space == 'True' and image_exists == 'False':
-            print(f"({device['name']}) Success: Device has space and image doesn't exist.")
-            
-            # Upload the image to the device.
-            try:
-                copy_upgrade_image(net_connect, device["target-version"], username, password)
-            except Exception as err:
-                print(err)
-                exit(1)
-
+            print(f"({device['name']}) Success: Device has space and image doesn't exist.")         
+            copy_upgrade_image(net_connect, device["target-version"], username, password)
             upgrade_image(net_connect, device)
 
         elif enough_space == 'False':
