@@ -66,7 +66,7 @@ def verify_md5(net_connect,file,md5):
     Verify that the MD5 checksum is as expected.
     Return True if image verification passes and False otherwise.
     """
-    print(f"({device['name']}) Verifying MD5 hash of the image.")
+    print(f"({thread.name}) Verifying MD5 hash of the image.")
     # Time out increased since verify command could take time. 
     # Note that 5 min is an overkill but safe.
     result = net_connect.send_command(f"verify /md5 flash:{file} {md5}", 
@@ -76,10 +76,10 @@ def verify_md5(net_connect,file,md5):
     reg = re.compile(r'Verified')
     md5_verified = reg.findall(result)
     if md5_verified:
-        print(f"({device['name']}) Success: Image verification passed.")
+        print(f"({thread.name}) Success: Image verification passed.")
         result = True
     else:
-        print(f"({device['name']}) Error: Image verification failed.")
+        print(f"({thread.name}) Error: Image verification failed.")
         result = False
     return md5_verified
 
@@ -87,7 +87,7 @@ def verify_space_iosxe(net_connect,file):
     """
     Check that there is enough space on the bootflash for the new image.
     """
-    print(f"({device['name']}) Checking disk space.")
+    print(f"({thread.name}) Checking disk space.")
     # Check what files are on the disk.
     result = net_connect.send_command("show flash:")
     # Using Regex parse how many bytes are free.
@@ -122,7 +122,7 @@ def copy_upgrade_image(net_connect, file, username, password):
             "exec-timeout 60"
             ]
         net_connect.send_config_set(commands)
-        print(f"({device['name']}) Success: Enabled SCP server and increased exec-timeout.")
+        print(f"({thread.name}) Success: Enabled SCP server and increased exec-timeout.")
     except Exception as err:
         print(err)
         exit(1)
@@ -145,10 +145,10 @@ def copy_upgrade_image(net_connect, file, username, password):
                 direction="put",
                 overwrite_file=False,
             )
-        print (f"({device['name']}) Success: Upload completed.")
+        print (f"({thread.name}) Success: Upload completed.")
 
     except Exception as err:
-        print (f"({device['name']}) Error: Upload failed: {err}")
+        print (f"({thread.name}) Error: Upload failed: {err}")
 
     connection.disconnect()
 
@@ -159,24 +159,24 @@ def software_install(net_connect,file):
     the new image using install activate command. The reload is auto-approved 
     after activation has compeleted.
     """
-    print(f"({device['name']}) Starting to install the new image.")
+    print(f"({thread.name}) Starting to install the new image.")
     try:
-        print(f"({device['name']}) Saving configuration.")
+        print(f"({thread.name}) Saving configuration.")
         net_connect.send_command('write memory', read_timeout=60)
-        print(f"({device['name']}) Adding the new image.")
+        print(f"({thread.name}) Adding the new image.")
         net_connect.send_command(f'install add file flash:{file}',
                                  read_timeout=660)
-        print(f"({device['name']}) Success: The new image was added.")
+        print(f"({thread.name}) Success: The new image was added.")
         net_connect.send_command(f'install activate',
                                  read_timeout=660,
                                  expect_string=r"This operation may require a reload of the system. Do you want to proceed"
                                  )
         net_connect.send_command('y')
-        print(f"({device['name']}) Success: Reload was approved.")
-        print(f"({device['name']}) Success: New image activated. Reloading.")
+        print(f"({thread.name}) Success: Reload was approved.")
+        print(f"({thread.name}) Success: New image activated. Reloading.")
 
     except Exception as err:
-        print(f"({device['name']}) Error: Install failed: {err}")
+        print(f"({thread.name}) Error: Install failed: {err}")
         exit(1)
 
 def upgrade_image(net_connect, device):
@@ -189,46 +189,46 @@ def upgrade_image(net_connect, device):
         except Exception as err:
             print(err)
     else:
-        print(f"({device['name']}) Error: Aborting the upgrade.")
+        print(f"({thread.name}) Error: Aborting the upgrade.")
 
-def command_worker(device, usename, password):
+def upgrade_process(device, usename, password):
     # Check that the device has been defined as IOS-XE device in the inventory.
     # If it's not exit the function gracefully.
     if device['type'] == 'cisco_xe': 
 
         # Try to connect to the device. Catch an authentication error and stop
         # function gracefully.
-        try:       
+        try:
+            print(f"({thread.name}) Connecting to device.")
             net_connect = netmiko.ConnectHandler(device_type=device['type'], 
                                                 ip=device['ipaddr'],
                                                 username=username, 
                                                 password=password,
                                                 )
         except netmiko.exceptions.NetmikoAuthenticationException as err:
-            print(err)
+            print(f"({thread.name}) Error: Connection to device failed: {err}")
             exit(1)
         
-        print(f"({device['name']}) Connecting to device.")
-        print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
+        print (f"({thread.name}) Preparing to upload image: {device['target-version']}")
         enough_space, image_exists = verify_space_iosxe(net_connect,device["target-version"])
         
         if enough_space == 'True' and image_exists == 'False':
-            print(f"({device['name']}) Success: Device has space and image doesn't exist.")         
+            print(f"({thread.name}) Success: Device has space and image doesn't exist.")         
             copy_upgrade_image(net_connect, device["target-version"], username, password)
             upgrade_image(net_connect, device)
 
         elif enough_space == 'False':
-            print(f"({device['name']}) Error: Not enough space. Try 'install",
+            print(f"({thread.name}) Error: Not enough space. Try 'install",
                 "remove inactive' on the device.")
 
         elif image_exists == 'True':
-            print(f"({device['name']}) Target image exists.")
+            print(f"({thread.name}) Target image exists.")
             upgrade_image(net_connect, device)
        
         net_connect.disconnect()
 
     else:                             
-        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        print (f"({thread.name}) Error: Device type {device['type']} not supported.")
         exit(1)
 
 # EXECUTION
@@ -252,15 +252,18 @@ inventory_file_path = "inventory.csv"
 print_inventory(inventory_file_path)
 inventory = read_inventory(inventory_file_path)
 
+# Use multithreading for updating multiple devicese simultaneously instead of 
+# in sequence. Ideally this should save a significant amount of time when the 
+# network is large. 
 print('\n---- Enable multithreading ----\n')
 config_threads_list = []
 for ipaddr,device in inventory.items():
      print(f"({device['name']}) Creating a thread.")
-     config_threads_list.append(threading.Thread(target=command_worker, args=(device, username, password)))
+     config_threads_list.append(threading.Thread(target=upgrade_process, name=device['name'], args=(device, username, password)))
 
 print('\n---- Begin running command threading ----\n')
-for config_thread in config_threads_list:
-    config_thread.start()
+for thread in config_threads_list:
+    thread.start()
 
-for config_thread in config_threads_list:
-    config_thread.join()
+for thread in config_threads_list:
+    thread.join()
