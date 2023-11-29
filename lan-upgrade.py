@@ -191,7 +191,7 @@ def upgrade_image(net_connect, device):
     else:
         print(f"({device['name']}) Error: Aborting the upgrade.")
 
-def command_worker(device, creds):
+def command_worker(device, usename, password):
     # Check that the device has been defined as IOS-XE device in the inventory.
     # If it's not exit the function gracefully.
     if device['type'] == 'cisco_xe': 
@@ -201,8 +201,8 @@ def command_worker(device, creds):
         try:       
             net_connect = netmiko.ConnectHandler(device_type=device['type'], 
                                                 ip=device['ipaddr'],
-                                                username=creds[0], 
-                                                password=creds[1],
+                                                username=username, 
+                                                password=password,
                                                 )
         except netmiko.exceptions.NetmikoAuthenticationException as err:
             print(err)
@@ -241,20 +241,22 @@ if os.path.isfile('netmiko_global.log'):
 logging.basicConfig(filename='netmiko_global.log', level=logging.DEBUG)
 logger = logging.getLogger("netmiko")
 
+# Ask for administrative credentials.
 print('\n---- Credentials, Inventory and Image  ----\n')
 username = input("Management username: ")
 password = getpass.getpass(prompt ="Management password: ")
-inventory_file_path = "inventory.csv"
 
+# Inventory is hardcoded as inventory.csv for simplicity. 
+# Print the inventory and then read it.
+inventory_file_path = "inventory.csv"
 print_inventory(inventory_file_path)
 inventory = read_inventory(inventory_file_path)
-admin_credentials = (username, password)
 
 print('\n---- Enable multithreading ----\n')
 config_threads_list = []
 for ipaddr,device in inventory.items():
      print(f"({device['name']}) Creating a thread.")
-     config_threads_list.append(threading.Thread(target=command_worker, args=(device, admin_credentials)))
+     config_threads_list.append(threading.Thread(target=command_worker, args=(device, username, password)))
 
 print('\n---- Begin running command threading ----\n')
 for config_thread in config_threads_list:
