@@ -19,6 +19,31 @@ import netmiko
 
 # FUNCTION DEFINITIONS
 
+def run_multithreaded(function, inventory, username, password):
+    """
+    Use multithreading for updating multiple devicese simultaneously instead
+    of in sequence. Ideally this should save a significant amount of time when
+    the network is large.
+    """
+    print('\n---- Enable multithreading ----\n')
+    config_threads_list = []
+    for hostname, device in inventory.items():
+        print(f"({device['name']}) Creating a thread.")
+        # The name of the thread is the name of the device being configured.
+        config_threads_list.append(threading.Thread(target=function,
+                                                    name=hostname,
+                                                    args=(device,
+                                                        username,
+                                                        password)))
+
+    print('\n---- Begin running command threading ----\n')
+    # Start threads. The use of .join() allows the main execution of all threads
+    # finish before the main program ends.
+    for thread in config_threads_list:
+        thread.start()
+    for thread in config_threads_list:
+        thread.join()
+
 def open_connection(device, username, password):
     """
     Open as connection to the target device. 
@@ -335,9 +360,7 @@ def main(args):
     # If there is an old log file delete it first.
     if os.path.isfile('netmiko_global.log'):
         os.remove('netmiko_global.log')
-
     logging.basicConfig(filename='netmiko_global.log', level=logging.DEBUG)
-    logger = logging.getLogger("netmiko")
 
     # Ask for administrative credentials.
     print('\n---- Credentials, Inventory and Image  ----\n')
@@ -351,72 +374,16 @@ def main(args):
     inventory = read_inventory(inventory_file_path)
 
     if args.operation == "add":
-        # Use multithreading for updating multiple devicese simultaneously instead 
-        # of in sequence. Ideally this should save a significant amount of time when
-        # the network is large.
-        print('\n---- Enable multithreading ----\n')
-        config_threads_list = []
-        for device in inventory.items():
-            print(f"({device['name']}) Creating a thread.")
-            # The name of the thread is the name of the device being configured.
-            config_threads_list.append(threading.Thread(target=add_image_process,
-                                                        name=device['name'],
-                                                        args=(device,
-                                                            username,
-                                                            password)))
+        run_multithreaded(add_image_process, inventory, username, password)
 
-        # Start threads. The use of .join() allows the main execution of all threads
-        # finish before the main program ends.
-        print('\n---- Begin running command threading ----\n')
-        for thread in config_threads_list:
-            thread.start()
-        for thread in config_threads_list:
-            thread.join()
     elif args.operation == "activate":
-        print('\n---- Enable multithreading ----\n')
-        config_threads_list = []
-        for device in inventory.items():
-            print(f"({device['name']}) Creating a thread.")
-            config_threads_list.append(threading.Thread(target=activate_image,
-                                                        name=device['name'],
-                                                        args=(device,
-                                                            username,
-                                                            password)))
-        print('\n---- Begin running command threading ----\n')
-        for thread in config_threads_list:
-            thread.start()
-        for thread in config_threads_list:
-            thread.join()
+        run_multithreaded(activate_image, inventory, username, password)
+
     elif args.operation == "commit":
-        print('\n---- Enable multithreading ----\n')
-        config_threads_list = []
-        for device in inventory.items():
-            print(f"({device['name']}) Creating a thread.")
-            config_threads_list.append(threading.Thread(target=add_image_process,
-                                                        name=device['name'],
-                                                        args=(device,
-                                                            username,
-                                                            password)))
-        print('\n---- Begin running command threading ----\n')
-        for thread in config_threads_list:
-            thread.start()
-        for thread in config_threads_list:
-            thread.join()
+        run_multithreaded(commit_image, inventory, username, password)
+
     elif args.operation == "clean":
-        print('\n---- Enable multithreading ----\n')
-        config_threads_list = []
-        for device in inventory.items():
-            print(f"({device['name']}) Creating a thread.")
-            config_threads_list.append(threading.Thread(target=clean_disk,
-                                                        name=device['name'],
-                                                        args=(device,
-                                                            username,
-                                                            password)))
-        print('\n---- Begin running command threading ----\n')
-        for thread in config_threads_list:
-            thread.start()
-        for thread in config_threads_list:
-            thread.join()
+        run_multithreaded(clean_disk, inventory, username, password)
     else:
         print(f"Operation not supported: {args.operation}")
 
@@ -425,6 +392,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='LAN upgrade for devices in INSTALL mode.')
     parser.add_argument('operation', type=str,
-                    help='Operation to be performed (add, activate, commit, clean)')
+                    help='Choose the operation to be performed: add, activate, commit, clean')
     args = parser.parse_args()
     main(args)
