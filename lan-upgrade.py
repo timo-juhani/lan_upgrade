@@ -5,21 +5,44 @@ Timo-Juhani Karjalainen, tkarjala@cisco.com, Cisco CX
 
 # IMPORTS
 
-import netmiko
-import os,sys,subprocess,re
-from pprint import pprint
+import os
+import sys
+import subprocess
+import re
 import threading
 import getpass
-from os.path import getsize
 import csv
 import logging
+import argparse
+import netmiko
 
 # FUNCTION DEFINITIONS
 
+def open_connection(device, username, password):
+    """
+    FUNCTION DESCRIPTION.
+    """
+    # Try to connect to the device. Catch an authentication error and stop
+    # function gracefully.
+    try:
+        print(f"({device['name']}) Connecting to device.")
+        net_connect = netmiko.ConnectHandler(device_type=device['type'],
+                                            ip=device['ipaddr'],
+                                            username=username,
+                                            password=password,
+                                            )
+        return net_connect
+    except netmiko.exceptions.NetmikoAuthenticationException as err:
+        print(f"({device['name']}) Error: Connection to device failed: {err}")
+        return sys.exit(1)
+
 def print_inventory(inventory_file_path):
+    """
+    FUNCTION DESCRIPTION.
+    """
     print("\nInventory:\n")
-    # Print the content of the inventory file. 
-    with open(inventory_file_path, newline='') as csvfile:
+    # Print the content of the inventory file.
+    with open(inventory_file_path, newline='', encoding='utf-8') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=' ', quotechar='|')
         for row in spamreader:
             print(', '.join(row))
@@ -29,16 +52,15 @@ def read_inventory(inventory_file_path):
     Import the inventory of devices to be upgraded. 
     """
     devices = {}
-    
     # Open the inventory file for reading the devices info.
-    with open(inventory_file_path) as inventory:
+    with open(inventory_file_path, encoding='utf-8') as inventory:
         # The first line in CSV is a header which needs to be skipped.
         next(inventory)
 
         # After the header has been skipped devices can be loaded to the dict.
         for item in inventory:
             # Create a list of each device using comma delimeter (.csv)
-            device_info = item.strip().split(',') 
+            device_info = item.strip().split(',')
             device = {'ipaddr': device_info[0],
                       'type':   device_info[1],
                       'name':   device_info[2],
@@ -91,9 +113,9 @@ def verify_md5(net_connect, device, md5):
     Return True if image verification passes and False otherwise.
     """
     print(f"({device['name']}) Verifying MD5 hash of the image.")
-    # Time out increased since verify command could take time. 
+    # Time out increased since verify command could take time.
     # Note that 5 min is an overkill but safe.
-    result = net_connect.send_command(f"verify /md5 flash:{device['target-version']} {md5}", 
+    result = net_connect.send_command(f"verify /md5 flash:{device['target-version']} {md5}",
                                       read_timeout=300
                                       )
     # User Regex to find the Verified string from the CLI output.
@@ -111,7 +133,6 @@ def copy_upgrade_image(device, net_connect, username, password):
     """
     Upload the upgrade image to the device and make sure SCP is enabled.
     """
-
     # Make sure that SCP server has been enabled on the device.
     try:
         # SCP is enabled if not already enabled. Line exec-timeout is increased
@@ -122,11 +143,11 @@ def copy_upgrade_image(device, net_connect, username, password):
             "exec-timeout 60"
             ]
         net_connect.send_config_set(commands)
-        print(f"({device['name']}) Success: Enabled SCP server and increased", 
+        print(f"({device['name']}) Success: Enabled SCP server and increased",
               "exec-timeout.")
     except Exception as err:
         print(err)
-        exit(1)
+        sys.exit(1)
 
     target_device = {
         "device_type": device["type"],
@@ -153,7 +174,7 @@ def copy_upgrade_image(device, net_connect, username, password):
 
     connection.disconnect()
 
-def software_install(net_connect, device):
+def install_add(net_connect, device):
     """ 
     Install the IOS-XE software in two phases. Saves the running configuration 
     then moves to add a new image using install add command then finally applies
@@ -168,55 +189,42 @@ def software_install(net_connect, device):
         net_connect.send_command(f"install add file flash:{device['target-version']}",
                                  read_timeout=660)
         print(f"({device['name']}) Success: The new image was added.")
-        net_connect.send_command(f'install activate',
-                                 read_timeout=660,
-                                 expect_string=r"This operation may require a reload of the system. Do you want to proceed"
-                                 )
-        net_connect.send_command('y')
-        print(f"({device['name']}) Success: Reload was approved.")
-        print(f"({device['name']}) Success: New image activated. Reloading.")
-
     except Exception as err:
-        print(f"({device['name']}) Error: Install failed: {err}")
-        exit(1)
+        print(f"({device['name']}) Error: Adding the image failed: {err}")
+        sys.exit(1)
 
-def upgrade_image(net_connect, device):
+def add_image(net_connect, device):
+    """
+    FUNCTION DESCRIPTION.
+    """
     md5 = check_md5(device["target-version"])
     md5_verified = verify_md5(net_connect, device, md5)
 
     if md5_verified:
         try:
-            software_install(net_connect,device)
+            install_add(net_connect,device)
         except Exception as err:
             print(err)
     else:
         print(f"({device['name']}) Error: Aborting the upgrade.")
 
-def upgrade_process(device, username, password):
+def add_image_process(device, username, password):
+    """
+    FUNCTION DESCRIPTION.
+    """
     # Check that the device has been defined as IOS-XE device in the inventory.
     # If it's not exit the function gracefully.
-    if device['type'] == 'cisco_xe': 
-
-        # Try to connect to the device. Catch an authentication error and stop
-        # function gracefully.
-        try:
-            print(f"({device['name']}) Connecting to device.")
-            net_connect = netmiko.ConnectHandler(device_type=device['type'], 
-                                                ip=device['ipaddr'],
-                                                username=username, 
-                                                password=password,
-                                                )
-        except netmiko.exceptions.NetmikoAuthenticationException as err:
-            print(f"({device['name']}) Error: Connection to device failed: {err}")
-            exit(1)
-        
+    if device['type'] == 'cisco_xe':
+        net_connect = open_connection(device, username, password)     
         print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
-        enough_space, image_exists = verify_space_iosxe(device, net_connect,device["target-version"])
-        
+        enough_space, image_exists = verify_space_iosxe(device, 
+                                                        net_connect,
+                                                        device["target-version"]
+                                                        )
         if enough_space == 'True' and image_exists == 'False':
-            print(f"({device['name']}) Success: Device has space and image doesn't exist.")         
+            print(f"({device['name']}) Success: Device has space and image doesn't exist.")
             copy_upgrade_image(device, net_connect, username, password)
-            upgrade_image(net_connect, device)
+            add_image(net_connect, device)
 
         elif enough_space == 'False':
             print(f"({device['name']}) Error: Not enough space. Try 'install",
@@ -224,19 +232,98 @@ def upgrade_process(device, username, password):
 
         elif image_exists == 'True':
             print(f"({device['name']}) Target image exists.")
-            upgrade_image(net_connect, device)
-       
+            add_image(net_connect, device)
         net_connect.disconnect()
 
     else:                             
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
-        exit(1)
+        sys.exit(1)
+
+def activate_image(device, username, password):
+    """ 
+    Activates the new image using install activate command. The reload is auto-
+    approved after activation has compeleted.
+    """
+    if device['type'] == 'cisco_xe':
+        net_connect = open_connection(device, username, password)   
+        print(f"({device['name']}) Starting to activate the new image.")
+        try:
+            print(f"({device['name']}) Activating the new image.")
+            net_connect.send_command('install activate',
+                                    read_timeout=660,
+                                    expect_string=r"This operation may require a reload of the system. Do you want to proceed"
+                                    )
+            net_connect.send_command('y')
+            print(f"({device['name']}) Success: Reload was approved.")
+            print(f"({device['name']}) Success: New image activated. Reloading.")
+
+        except Exception as err:
+            print(f"({device['name']}) Error: Activating the image failed: {err}")
+            sys.exit(1)
+
+        net_connect.disconnect()
+
+    else:
+        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        sys.exit(1)
+
+def commit_image(device, username, password):
+    """ 
+    Commits the new image using install commit command.
+    """
+    if device['type'] == 'cisco_xe': 
+        net_connect = open_connection(device, username, password)   
+        print(f"({device['name']}) Starting to commit the new image.")
+        try:
+            print(f"({device['name']}) Commit the new image.")
+            net_connect.send_command('install commit',
+                                    read_timeout=660,
+                                    )
+            print(f"({device['name']}) Success: Commit complete. Device upgraded.")
+
+        except Exception as err:
+            print(f"({device['name']}) Error: commiting the image failed: {err}")
+            sys.exit(1)
+
+        net_connect.disconnect()
+
+    else:                             
+        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        sys.exit(1)
+
+def clean_disk(device, username, password):
+    """ 
+    Commits the new image using install commit command.
+    """
+    if device['type'] == 'cisco_xe':
+        net_connect = open_connection(device, username, password)   
+        print(f"({device['name']}) Starting to clean the device from inactive images.")
+        try:
+            net_connect.send_command('install remove inactive',
+                                    read_timeout=660,
+                                    expect_string=r"Do you want to remove the above files"
+                                    )
+            net_connect.send_command('y')
+            print(f"({device['name']}) Success: Clean complete.")
+
+        except Exception as err:
+            print(f"({device['name']}) Error: Clean failed: {err}")
+            sys.exit(1)
+
+        net_connect.disconnect()
+
+    else:                             
+        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        sys.exit(1)
 
 # MAIN FUNCTION
 
-def main():
+def main(args):
+    """
+    FUNCTION DESCRIPTION.
+    """
     # Start logging
-    # If there is an old log file delete it first. 
+    # If there is an old log file delete it first.
     if os.path.isfile('netmiko_global.log'):
         os.remove('netmiko_global.log')
 
@@ -248,36 +335,87 @@ def main():
     username = input("Management username: ")
     password = getpass.getpass(prompt ="Management password: ")
 
-    # Inventory is hardcoded as inventory.csv for simplicity. 
+    # Inventory is hardcoded as inventory.csv for simplicity.
     # Print the inventory and then read it.
     inventory_file_path = "inventory.csv"
     print_inventory(inventory_file_path)
     inventory = read_inventory(inventory_file_path)
 
-    # Use multithreading for updating multiple devicese simultaneously instead 
-    # of in sequence. Ideally this should save a significant amount of time when
-    # the network is large. 
-    print('\n---- Enable multithreading ----\n')
-    config_threads_list = []
-    for ipaddr,device in inventory.items():
-        print(f"({device['name']}) Creating a thread.")
-        # The name of the thread is the name of the device being configured.
-        config_threads_list.append(threading.Thread(target=upgrade_process, 
-                                                    name=device['name'], 
-                                                    args=(device, 
-                                                          username, 
-                                                          password)))
+    if args.operation == "add":
+        # Use multithreading for updating multiple devicese simultaneously instead 
+        # of in sequence. Ideally this should save a significant amount of time when
+        # the network is large.
+        print('\n---- Enable multithreading ----\n')
+        config_threads_list = []
+        for device in inventory.items():
+            print(f"({device['name']}) Creating a thread.")
+            # The name of the thread is the name of the device being configured.
+            config_threads_list.append(threading.Thread(target=add_image_process,
+                                                        name=device['name'],
+                                                        args=(device,
+                                                            username,
+                                                            password)))
 
-    # Start threads. The use of .join() allows the main execution of all threads
-    # finish before the main program ends.
-    print('\n---- Begin running command threading ----\n')
-    for thread in config_threads_list:
-        thread.start()
-    
-    for thread in config_threads_list:
-        thread.join()
+        # Start threads. The use of .join() allows the main execution of all threads
+        # finish before the main program ends.
+        print('\n---- Begin running command threading ----\n')
+        for thread in config_threads_list:
+            thread.start()
+        for thread in config_threads_list:
+            thread.join()
+    elif args.operation == "activate":
+        print('\n---- Enable multithreading ----\n')
+        config_threads_list = []
+        for device in inventory.items():
+            print(f"({device['name']}) Creating a thread.")
+            config_threads_list.append(threading.Thread(target=activate_image,
+                                                        name=device['name'],
+                                                        args=(device,
+                                                            username,
+                                                            password)))
+        print('\n---- Begin running command threading ----\n')
+        for thread in config_threads_list:
+            thread.start()
+        for thread in config_threads_list:
+            thread.join()
+    elif args.operation == "commit":
+        print('\n---- Enable multithreading ----\n')
+        config_threads_list = []
+        for device in inventory.items():
+            print(f"({device['name']}) Creating a thread.")
+            config_threads_list.append(threading.Thread(target=add_image_process,
+                                                        name=device['name'],
+                                                        args=(device,
+                                                            username,
+                                                            password)))
+        print('\n---- Begin running command threading ----\n')
+        for thread in config_threads_list:
+            thread.start()
+        for thread in config_threads_list:
+            thread.join()
+    elif args.operation == "clean":
+        print('\n---- Enable multithreading ----\n')
+        config_threads_list = []
+        for device in inventory.items():
+            print(f"({device['name']}) Creating a thread.")
+            config_threads_list.append(threading.Thread(target=clean_disk,
+                                                        name=device['name'],
+                                                        args=(device,
+                                                            username,
+                                                            password)))
+        print('\n---- Begin running command threading ----\n')
+        for thread in config_threads_list:
+            thread.start()
+        for thread in config_threads_list:
+            thread.join()
+    else:
+        print(f"Operation not supported: {args.operation}")
 
 # EXECUTION
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description='LAN upgrade for devices in INSTALL mode.')
+    parser.add_argument('operation', type=str,
+                    help='Operation to be performed (add, activate, commit, clean)')
+    args = parser.parse_args()
+    main(args)
