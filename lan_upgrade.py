@@ -160,7 +160,7 @@ def verify_md5(net_connect, device, md5):
         result = False
     return md5_verified
 
-def copy_upgrade_image(device, net_connect, username, password):
+def copy_upgrade_image(net_connect, device):
     """
     Upload the image to the target device. Make sure that SCP has been enabled
     and adjust the exec-timeout.
@@ -181,18 +181,11 @@ def copy_upgrade_image(device, net_connect, username, password):
         print(err)
         sys.exit(1)
 
-    target_device = {
-        "device_type": device["type"],
-        "host": device["ipaddr"],
-        "username": username,
-        "password": password
-    }
-
-
     # Create a new SSH connection and transfer the file over SCP.
     # If the file already exist don't overwrite it.
     try:
-        connection = netmiko.ConnectHandler(**target_device)
+        print(f"({device['name']}) Uploading the image now.")
+        #connection = netmiko.ConnectHandler(**target_device)
         netmiko.file_transfer(
                 net_connect,
                 source_file=device["target-version"],
@@ -205,8 +198,6 @@ def copy_upgrade_image(device, net_connect, username, password):
 
     except Exception as err:
         print (f"({device['name']}) Error: Upload failed: {err}")
-
-    connection.disconnect()
 
 def install_add(net_connect, device):
     """ 
@@ -252,13 +243,13 @@ def add_image_process(device, username, password):
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)     
         print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
-        enough_space, image_exists = verify_space_iosxe(device, 
+        enough_space, image_exists = verify_space_iosxe(device,
                                                         net_connect,
                                                         device["target-version"]
                                                         )
         if enough_space == 'True' and image_exists == 'False':
             print(f"({device['name']}) Success: Device has space and image doesn't exist.")
-            copy_upgrade_image(device, net_connect, username, password)
+            copy_upgrade_image(net_connect, device)
             verify_and_run_install_add(net_connect, device)
 
         elif enough_space == 'False':
