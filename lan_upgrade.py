@@ -346,16 +346,22 @@ def clean_disk(device, username, password):
 
         net_connect.disconnect()
 
-    else:                             
+    else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
 # MAIN FUNCTION
 
-def main(args):
+def main():
     """
-    FUNCTION DESCRIPTION.
+    Executes the program. 
     """
+    # Command parser
+    parser = argparse.ArgumentParser(description='LAN upgrade for devices in INSTALL mode.')
+    parser.add_argument('operation', type=str,
+                    help='Choose the operation to be performed: add, activate, commit, clean')
+    args = parser.parse_args()
+
     # Start logging
     # If there is an old log file delete it first.
     if os.path.isfile('netmiko_global.log'):
@@ -373,6 +379,8 @@ def main(args):
     print_inventory(inventory_file_path)
     inventory = read_inventory(inventory_file_path)
 
+    # Depending on the selected positional argument run a different action
+    # using multithreading against the list of devices defined in inventory.csv.
     if args.operation == "add":
         run_multithreaded(add_image_process, inventory, username, password)
 
@@ -390,8 +398,4 @@ def main(args):
 # EXECUTION
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='LAN upgrade for devices in INSTALL mode.')
-    parser.add_argument('operation', type=str,
-                    help='Choose the operation to be performed: add, activate, commit, clean')
-    args = parser.parse_args()
-    main(args)
+    main()
