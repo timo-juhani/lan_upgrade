@@ -1,6 +1,7 @@
 """
 LAN UPGRADE FOR IOS-XE SWITCHES
 Timo-Juhani Karjalainen, tkarjala@cisco.com, Cisco CX
+2023
 """
 
 # IMPORTS
@@ -20,7 +21,8 @@ import netmiko
 
 def open_connection(device, username, password):
     """
-    FUNCTION DESCRIPTION.
+    Open as connection to the target device. 
+    Returns a ConnectHandler object or an error. 
     """
     # Try to connect to the device. Catch an authentication error and stop
     # function gracefully.
@@ -38,7 +40,7 @@ def open_connection(device, username, password):
 
 def print_inventory(inventory_file_path):
     """
-    FUNCTION DESCRIPTION.
+    Prints the contents of the inventory.csv to the console.
     """
     print("\nInventory:\n")
     # Print the content of the inventory file.
@@ -49,7 +51,9 @@ def print_inventory(inventory_file_path):
 
 def read_inventory(inventory_file_path):
     """
-    Import the inventory of devices to be upgraded. 
+    Reads the inventory.csv file.
+    Returns a dictionary that contains information about each device defined by
+    the user.
     """
     devices = {}
     # Open the inventory file for reading the devices info.
@@ -73,6 +77,8 @@ def read_inventory(inventory_file_path):
 def verify_space_iosxe(device, net_connect,file):
     """
     Check that there is enough space on the bootflash for the new image.
+    Returns two booleans that provide information whether there is enough disk 
+    space and whether the target .bin exists on the device already.
     """
     print(f"({device['name']}) Checking disk space.")
     # Check what files are on the disk.
@@ -131,7 +137,8 @@ def verify_md5(net_connect, device, md5):
 
 def copy_upgrade_image(device, net_connect, username, password):
     """
-    Upload the upgrade image to the device and make sure SCP is enabled.
+    Upload the image to the target device. Make sure that SCP has been enabled
+    and adjust the exec-timeout.
     """
     # Make sure that SCP server has been enabled on the device.
     try:
@@ -157,6 +164,7 @@ def copy_upgrade_image(device, net_connect, username, password):
     }
 
     # Create a new SSH connection and transfer the file over SCP.
+    # If the file already exist don't overwrite it. 
     try:
         connection = netmiko.ConnectHandler(**target_device)
         netmiko.file_transfer(
@@ -176,10 +184,8 @@ def copy_upgrade_image(device, net_connect, username, password):
 
 def install_add(net_connect, device):
     """ 
-    Install the IOS-XE software in two phases. Saves the running configuration 
-    then moves to add a new image using install add command then finally applies
-    the new image using install activate command. The reload is auto-approved 
-    after activation has compeleted.
+    Using install command add the upgrade image to the device's image 
+    repository.
     """
     print(f"({device['name']}) Starting to install the new image.")
     try:
@@ -193,9 +199,10 @@ def install_add(net_connect, device):
         print(f"({device['name']}) Error: Adding the image failed: {err}")
         sys.exit(1)
 
-def add_image(net_connect, device):
+def verify_and_run_install_add(net_connect, device):
     """
-    FUNCTION DESCRIPTION.
+    Add the image to the device's image repository only if the MD5 checksum is 
+    ok.
     """
     md5 = check_md5(device["target-version"])
     md5_verified = verify_md5(net_connect, device, md5)
@@ -210,7 +217,9 @@ def add_image(net_connect, device):
 
 def add_image_process(device, username, password):
     """
-    FUNCTION DESCRIPTION.
+    Adds the image to the device's image repository after running space and 
+    image existence checks, copying the image to the device and verifying that 
+    the MD5 checksum matches with the expected.
     """
     # Check that the device has been defined as IOS-XE device in the inventory.
     # If it's not exit the function gracefully.
@@ -224,7 +233,7 @@ def add_image_process(device, username, password):
         if enough_space == 'True' and image_exists == 'False':
             print(f"({device['name']}) Success: Device has space and image doesn't exist.")
             copy_upgrade_image(device, net_connect, username, password)
-            add_image(net_connect, device)
+            verify_and_run_install_add(net_connect, device)
 
         elif enough_space == 'False':
             print(f"({device['name']}) Error: Not enough space. Try 'install",
@@ -232,7 +241,7 @@ def add_image_process(device, username, password):
 
         elif image_exists == 'True':
             print(f"({device['name']}) Target image exists.")
-            add_image(net_connect, device)
+            verify_and_run_install_add(net_connect, device)
         net_connect.disconnect()
 
     else:                             
@@ -271,7 +280,7 @@ def commit_image(device, username, password):
     """ 
     Commits the new image using install commit command.
     """
-    if device['type'] == 'cisco_xe': 
+    if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)   
         print(f"({device['name']}) Starting to commit the new image.")
         try:
@@ -286,14 +295,14 @@ def commit_image(device, username, password):
             sys.exit(1)
 
         net_connect.disconnect()
-
-    else:                             
+    else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
 def clean_disk(device, username, password):
     """ 
-    Commits the new image using install commit command.
+    Clean the device flash from inactive and unused images in order to free up
+    space for the upgrade.
     """
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)   
