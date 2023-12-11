@@ -188,12 +188,13 @@ def copy_upgrade_image(device, net_connect, username, password):
         "password": password
     }
 
+
     # Create a new SSH connection and transfer the file over SCP.
-    # If the file already exist don't overwrite it. 
+    # If the file already exist don't overwrite it.
     try:
         connection = netmiko.ConnectHandler(**target_device)
         netmiko.file_transfer(
-                connection,
+                net_connect,
                 source_file=device["target-version"],
                 dest_file=device["target-version"],
                 file_system="flash:",
