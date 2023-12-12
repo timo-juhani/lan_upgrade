@@ -160,15 +160,14 @@ def verify_md5(net_connect, device, md5):
         result = False
     return md5_verified
 
-def copy_upgrade_image(net_connect, device):
+def enable_scp(net_connect, device):
     """
-    Upload the image to the target device. Make sure that SCP has been enabled
-    and adjust the exec-timeout.
+    Enable SCP server on the target device.
     """
-    # Make sure that SCP server has been enabled on the device.
     try:
         # SCP is enabled if not already enabled. Line exec-timeout is increased
-        # to ensure the image has time to upload properly. 
+        # to ensure the image has time to upload properly.
+        print(f"({device['name']}) Enabling SCP server now.")
         commands = [
             "ip scp server enable", 
             "line vty 0 4", 
@@ -178,14 +177,17 @@ def copy_upgrade_image(net_connect, device):
         print(f"({device['name']}) Success: Enabled SCP server and increased",
               "exec-timeout.")
     except Exception as err:
-        print(err)
+        print (f"({device['name']}) Error: Enabling SCP failed: {err}")
         sys.exit(1)
 
+def copy_upgrade_image(net_connect, device):
+    """
+    Upload the image to the target device using SCP file transfer.
+    """
     # Create a new SSH connection and transfer the file over SCP.
     # If the file already exist don't overwrite it.
     try:
         print(f"({device['name']}) Uploading the image now.")
-        #connection = netmiko.ConnectHandler(**target_device)
         netmiko.file_transfer(
                 net_connect,
                 source_file=device["target-version"],
@@ -195,7 +197,6 @@ def copy_upgrade_image(net_connect, device):
                 overwrite_file=False,
             )
         print (f"({device['name']}) Success: Upload completed.")
-
     except Exception as err:
         print (f"({device['name']}) Error: Upload failed: {err}")
 
@@ -249,6 +250,7 @@ def add_image_process(device, username, password):
                                                         )
         if enough_space == 'True' and image_exists == 'False':
             print(f"({device['name']}) Success: Device has space and image doesn't exist.")
+            enable_scp(net_connect, device)
             copy_upgrade_image(net_connect, device)
             verify_and_run_install_add(net_connect, device)
 
