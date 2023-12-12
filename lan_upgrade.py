@@ -12,7 +12,6 @@ import subprocess
 import re
 import threading
 import getpass
-import csv
 import logging
 import argparse
 import netmiko
@@ -379,10 +378,11 @@ def full_install_no_prompts(device, username, password):
 
 def main():
     """
-    Executes the program. 
+    Executes the main program. 
     """
     # Print the welcome banner.
     banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
+    print("\n")
     print(banner)
 
     # Create the command parser.
