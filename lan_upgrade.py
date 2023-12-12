@@ -17,6 +17,7 @@ import argparse
 import netmiko
 import pyfiglet
 import pandas
+import termcolor
 
 # FUNCTION DEFINITIONS
 
@@ -26,7 +27,6 @@ def run_multithreaded(function, inventory, username, password):
     of in sequence. Ideally this should save a significant amount of time when
     the network is large.
     """
-    print('\n---- Enable multithreading ----\n')
     config_threads_list = []
     for hostname, device in inventory.items():
         print(f"({device['name']}) Creating a thread.")
@@ -36,8 +36,6 @@ def run_multithreaded(function, inventory, username, password):
                                                     args=(device,
                                                         username,
                                                         password)))
-
-    print('\n---- Begin running command threading ----\n')
     # Start threads. The use of .join() allows the main execution of all threads
     # finish before the main program ends.
     for thread in config_threads_list:
@@ -383,7 +381,7 @@ def main():
     # Print the welcome banner.
     banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
     print("\n")
-    print(banner)
+    print(termcolor.colored(banner, 'red'))
 
     # Create the command parser.
     parser = argparse.ArgumentParser(description="Shell application for running upgrades.")
@@ -415,7 +413,6 @@ def main():
     logging.basicConfig(filename=console_file, level=logging.DEBUG)
 
     # Ask for administrative credentials if those haven't been provided as arguments.
-    print("\n---- Credentials, Inventory and Image  ----")
     if username is None and operation != "info":
         username = input("Management username: ")
     if password is None and operation != "info":
@@ -440,6 +437,8 @@ def main():
         run_multithreaded(full_install_no_prompts, inventory, username, password)
     elif operation == "info" and show_inventory is True:
         print_inventory(inventory_file_path)
+    elif operation == "info":
+        print("Please choose an info switch.")
     else:
         print(f"Operation not supported: {args.operation}")
 
