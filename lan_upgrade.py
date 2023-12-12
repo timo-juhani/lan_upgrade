@@ -62,6 +62,9 @@ def open_connection(device, username, password):
     except netmiko.exceptions.NetmikoAuthenticationException as err:
         print(f"({device['name']}) Error: Connection to device failed: {err}")
         return sys.exit(1)
+    except netmiko.exceptions.NetmikoTimeoutException as err:
+        print(f"({device['name']}) Error: Device connection time out: {err}")
+        return sys.exit(1)
 
 def print_inventory(inventory_file_path):
     """
@@ -352,20 +355,29 @@ def main():
     """
     # Command parser
     parser = argparse.ArgumentParser(description='LAN upgrade for devices in INSTALL mode.')
-    parser.add_argument('operation', type=str,
-                    help='Choose the operation to be performed: add, activate, commit, clean')
+    parser.add_argument("operation", type=str,
+                    help="Choose the operation to be performed: add, activate, commit, clean")
+    parser.add_argument("-u", "--username", type=str, help="Username of the admin user.")
+    parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
     args = parser.parse_args()
 
-    # Start logging
+    # Save variables from arguments provided by the user.
+    operation = args.operation
+    username = args.username
+    password = args.password
+
+    # Start logging.
     # If there is an old log file delete it first.
     if os.path.isfile('netmiko_global.log'):
         os.remove('netmiko_global.log')
     logging.basicConfig(filename='netmiko_global.log', level=logging.DEBUG)
 
-    # Ask for administrative credentials.
-    print('\n---- Credentials, Inventory and Image  ----\n')
-    username = input("Management username: ")
-    password = getpass.getpass(prompt ="Management password: ")
+    # Ask for administrative credentials if those haven't been provided as arguments.
+    print("\n---- Credentials, Inventory and Image  ---")
+    if username is None:
+        username = input("Management username: ")
+    if password is None:
+        password = getpass.getpass(prompt ="Management password: ")
 
     # Inventory is hardcoded as inventory.csv for simplicity.
     # Print the inventory and then read it.
@@ -375,16 +387,16 @@ def main():
 
     # Depending on the selected positional argument run a different action
     # using multithreading against the list of devices defined in inventory.csv.
-    if args.operation == "add":
+    if operation == "add":
         run_multithreaded(add_image_process, inventory, username, password)
 
-    elif args.operation == "activate":
+    elif operation == "activate":
         run_multithreaded(activate_image, inventory, username, password)
 
-    elif args.operation == "commit":
+    elif operation == "commit":
         run_multithreaded(commit_image, inventory, username, password)
 
-    elif args.operation == "clean":
+    elif operation == "clean":
         run_multithreaded(clean_disk, inventory, username, password)
     else:
         print(f"Operation not supported: {args.operation}")
