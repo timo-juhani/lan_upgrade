@@ -373,6 +373,36 @@ def full_install_no_prompts(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+def find_devices_in_bundle_mode(device, username, password):
+    """
+    Scans the device configuration to find whether the device is in bundle mode.
+    Returns true if in bundle mode or false if not. 
+    """
+    if device['type'] == 'cisco_xe':
+        net_connect = open_connection(device, username, password)
+        print(f"({device['name']}) Getting show commands.")
+        try:
+            print(f"({device['name']}) Get 'show version'.")
+            output = net_connect.send_command('show version', read_timeout=60)
+
+        except Exception as err:
+            print(f"({device['name']}) Error: Getting show commands failed: {err}")
+            sys.exit(1)
+
+        net_connect.disconnect()
+        if "BUNDLE" in output:
+            msg = "Warning: Device in BUNDLE mode. Convert to INSTALL before upgrade."
+            print(termcolor.colored(f"({device['name']}) {msg}", "yellow"))
+        elif "INSTALL" in output:
+            msg = "Success: Device in INSTALL mode."
+            print(termcolor.colored(f"({device['name']}) {msg}", "green"))
+        else:
+            msg = "Error: Can't determine whether in INSTALL or BUNDLE mode. Manual check required."
+            print(termcolor.colored(f"({device['name']}) {msg}", "red"))
+    else:
+        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        sys.exit(1)
+
 # MAIN FUNCTION
 
 def main():
@@ -398,6 +428,8 @@ def main():
     parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
     parser.add_argument("-i", "--inventory", type=bool, help="Display the inventory.",
                         action=argparse.BooleanOptionalAction)
+    parser.add_argument("-b", "--bundle", type=bool, help="Display devices in bundle mode.",
+                        action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
 
     # Save variables from arguments provided by the user.
@@ -405,6 +437,7 @@ def main():
     username = args.username
     password = args.password
     show_inventory = args.inventory
+    scan_for_bundle = args.bundle
 
     # Start logging.
     # If there is an old log file delete it first.
@@ -414,9 +447,9 @@ def main():
     logging.basicConfig(filename=console_file, level=logging.DEBUG)
 
     # Ask for administrative credentials if those haven't been provided as arguments.
-    if username is None and operation != "info":
+    if username is None:
         username = input("Management username: ")
-    if password is None and operation != "info":
+    if password is None:
         password = getpass.getpass(prompt ="Management password: ")
 
     # Inventory is hardcoded as inventory.csv for simplicity.
@@ -438,6 +471,8 @@ def main():
         run_multithreaded(full_install_no_prompts, inventory, username, password)
     elif operation == "info" and show_inventory is True:
         print_inventory(inventory_file_path)
+    elif operation == "info" and scan_for_bundle is True:
+        run_multithreaded(find_devices_in_bundle_mode, inventory, username, password)
     elif operation == "info":
         print("Please choose an info switch.")
     else:
