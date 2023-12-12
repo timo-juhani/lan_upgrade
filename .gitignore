@@ -1,8 +1,8 @@
-# Production inventory
+# Ignore inventory
 inventory.csv
 
-# Software upgrade binaries
+# Ignore upgrade binaries
 cat*.bin
 
-# Netmiko logs
-netmiko_global.log
+# Ignore logs
+*.log

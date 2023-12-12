@@ -347,6 +347,34 @@ def clean_disk(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+def full_install_no_prompts(device, username, password):
+    """ 
+    Adds, activate and commits the image using install commands without raising prompts for the 
+    user. It enables a one step install for users that doesn't require a phased approach with add, 
+    activate and commit commands. Also, it offers the opportunity to covert from BUNDLE mode to 
+    INSTALL mode.
+    """
+    if device['type'] == 'cisco_xe':
+        net_connect = open_connection(device, username, password)
+        try:
+            print(f"({device['name']}) Saving configuration.")
+            net_connect.send_command('write memory', read_timeout=60)
+            print(f"({device['name']}) Starting full install without prompts.")
+            net_connect.send_command(f"install add file flash:{device['target-version']} activate commit prompt-level none",
+                                    read_timeout=900,
+                                    )
+            print(f"({device['name']}) Success: Full install complete. Device rebooting.")
+
+        except Exception as err:
+            print(f"({device['name']}) Error: Full install failed: {err}")
+            sys.exit(1)
+
+        net_connect.disconnect()
+
+    else:
+        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        sys.exit(1)
+
 # MAIN FUNCTION
 
 def main():
@@ -356,7 +384,12 @@ def main():
     # Command parser
     parser = argparse.ArgumentParser(description='LAN upgrade for devices in INSTALL mode.')
     parser.add_argument("operation", type=str,
-                    help="Choose the operation to be performed: add, activate, commit, clean")
+                    help= """Choose the operation to be performed:
+                    add,
+                    activate,
+                    commit,
+                    clean,
+                    full-install""")
     parser.add_argument("-u", "--username", type=str, help="Username of the admin user.")
     parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
     args = parser.parse_args()
@@ -368,9 +401,10 @@ def main():
 
     # Start logging.
     # If there is an old log file delete it first.
-    if os.path.isfile('netmiko_global.log'):
-        os.remove('netmiko_global.log')
-    logging.basicConfig(filename='netmiko_global.log', level=logging.DEBUG)
+    console_file = "console.log"
+    if os.path.isfile(console_file):
+        os.remove(console_file)
+    logging.basicConfig(filename=console_file, level=logging.DEBUG)
 
     # Ask for administrative credentials if those haven't been provided as arguments.
     print("\n---- Credentials, Inventory and Image  ---")
@@ -398,6 +432,8 @@ def main():
 
     elif operation == "clean":
         run_multithreaded(clean_disk, inventory, username, password)
+    elif operation == "full-install":
+        run_multithreaded(full_install_no_prompts, inventory, username, password)
     else:
         print(f"Operation not supported: {args.operation}")
 

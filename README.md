@@ -1,9 +1,14 @@
 # LAN Upgrade
 
-Prerequisites
-- All devices must be INSTALL mode, if not coversion from BUNDLE must be done.
+## Prerequisites
+- SSH access using admin credentials.
+- All devices must be in INSTALL mode, if not conversion from BUNDLE must be done.
 
-To do: 
-- Re-write copy_upgrade_image function
-- Add bundle mode upgrade
-- Add conversion from bundle mode to install
+## Scenario 1: Staged Install
+as
+
+## Scenario 2: Full-Installation
+as
+
+## To do: 
+- Style the inventory print
