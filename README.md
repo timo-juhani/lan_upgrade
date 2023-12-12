@@ -12,3 +12,4 @@ as
 
 ## To do: 
 - Style the inventory print
+- Convert from BUNDLE to INSTALL

@@ -16,6 +16,8 @@ import csv
 import logging
 import argparse
 import netmiko
+import pyfiglet
+import pandas
 
 # FUNCTION DEFINITIONS
 
@@ -73,9 +75,8 @@ def print_inventory(inventory_file_path):
     print("\nInventory:\n")
     # Print the content of the inventory file.
     with open(inventory_file_path, newline='', encoding='utf-8') as csvfile:
-        spamreader = csv.reader(csvfile, delimiter=' ', quotechar='|')
-        for row in spamreader:
-            print(', '.join(row))
+        print(pandas.read_csv(csvfile))
+        print("\n")
 
 def read_inventory(inventory_file_path):
     """
@@ -351,8 +352,7 @@ def full_install_no_prompts(device, username, password):
     """ 
     Adds, activate and commits the image using install commands without raising prompts for the 
     user. It enables a one step install for users that doesn't require a phased approach with add, 
-    activate and commit commands. Also, it offers the opportunity to covert from BUNDLE mode to 
-    INSTALL mode.
+    activate and commit commands. 
     """
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)
@@ -381,10 +381,15 @@ def main():
     """
     Executes the program. 
     """
-    # Command parser
-    parser = argparse.ArgumentParser(description='LAN upgrade for devices in INSTALL mode.')
+    # Print the welcome banner.
+    banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
+    print(banner)
+
+    # Create the command parser.
+    parser = argparse.ArgumentParser(description="Shell application for running upgrades.")
     parser.add_argument("operation", type=str,
                     help= """Choose the operation to be performed:
+                    info,
                     add,
                     activate,
                     commit,
@@ -392,12 +397,15 @@ def main():
                     full-install""")
     parser.add_argument("-u", "--username", type=str, help="Username of the admin user.")
     parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
+    parser.add_argument("-i", "--inventory", type=bool, help="Display the inventory.",
+                        action=argparse.BooleanOptionalAction)
     args = parser.parse_args()
 
     # Save variables from arguments provided by the user.
     operation = args.operation
     username = args.username
     password = args.password
+    show_inventory = args.inventory
 
     # Start logging.
     # If there is an old log file delete it first.
@@ -407,33 +415,31 @@ def main():
     logging.basicConfig(filename=console_file, level=logging.DEBUG)
 
     # Ask for administrative credentials if those haven't been provided as arguments.
-    print("\n---- Credentials, Inventory and Image  ---")
-    if username is None:
+    print("\n---- Credentials, Inventory and Image  ----")
+    if username is None and operation != "info":
         username = input("Management username: ")
-    if password is None:
+    if password is None and operation != "info":
         password = getpass.getpass(prompt ="Management password: ")
 
     # Inventory is hardcoded as inventory.csv for simplicity.
     # Print the inventory and then read it.
     inventory_file_path = "inventory.csv"
-    print_inventory(inventory_file_path)
     inventory = read_inventory(inventory_file_path)
 
     # Depending on the selected positional argument run a different action
     # using multithreading against the list of devices defined in inventory.csv.
     if operation == "add":
         run_multithreaded(add_image_process, inventory, username, password)
-
     elif operation == "activate":
         run_multithreaded(activate_image, inventory, username, password)
-
     elif operation == "commit":
         run_multithreaded(commit_image, inventory, username, password)
-
     elif operation == "clean":
         run_multithreaded(clean_disk, inventory, username, password)
     elif operation == "full-install":
         run_multithreaded(full_install_no_prompts, inventory, username, password)
+    elif operation == "info" and show_inventory is True:
+        print_inventory(inventory_file_path)
     else:
         print(f"Operation not supported: {args.operation}")
 
