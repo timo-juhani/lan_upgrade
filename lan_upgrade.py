@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 LAN UPGRADE FOR IOS-XE SWITCHES
 Timo-Juhani Karjalainen, tkarjala@cisco.com, Cisco CX

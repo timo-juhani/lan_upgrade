@@ -12,4 +12,5 @@ as
 
 ## To do: 
 - Style the inventory print
+- Which devices are in BUNDLE mode
 - Convert from BUNDLE to INSTALL
