@@ -31,13 +31,16 @@ def exception_handler(func):
         try:
             return func(device, username, password, *args, **kwargs)
         except netmiko.exceptions.NetmikoAuthenticationException as err:
-            print(f"({device['name']}) Error: Authentication to device failed: {err}")
+            msg = f"({device['name']}) Error: Authentication to device failed: {err}"
+            print(termcolor.colored(msg, "red"))
             return sys.exit(1)
         except netmiko.exceptions.NetmikoTimeoutException as err:
-            print(f"({device['name']}) Error: Device connection time out: {err}")
+            msg = f"({device['name']}) Error: Device connection time out: {err}"
+            print(termcolor.colored(msg, "red"))
             return sys.exit(1)
         except Exception as err:
-            print (f"({device['name']}) Error: {err}")
+            msg = f"({device['name']}) Error: {err}"
+            print(termcolor.colored(msg, "red"))
             return sys.exit(1)
     return inner_function
 
@@ -141,7 +144,6 @@ def check_md5(file):
     print(f"(Global) Info: Expected MD5 hash is {md5}")
     return md5
 
-@exception_handler
 def verify_md5(net_connect, device, md5):
     """
     Verify that the MD5 checksum is as expected.
@@ -163,7 +165,6 @@ def verify_md5(net_connect, device, md5):
         result = False
     return md5_verified
 
-@exception_handler
 def enable_scp(net_connect, device):
     """
     Enable SCP server on the target device.
@@ -180,7 +181,6 @@ def enable_scp(net_connect, device):
     net_connect.send_config_set(commands)
     print(f"({device['name']}) Success: Enabled SCP server and exec-timeout increased.")
 
-@exception_handler
 def copy_upgrade_image(net_connect, device):
     """
     Upload the image to the target device using SCP file transfer.
@@ -189,11 +189,10 @@ def copy_upgrade_image(net_connect, device):
     # If the file already exist don't overwrite it.
     print(f"({device['name']}) Uploading the image now.")
     netmiko.file_transfer(net_connect, source_file=device["target-version"],
-                          dest_file=device["target-version"], file_system="flash:", direction="put", 
+                          dest_file=device["target-version"], file_system="flash:", direction="put",
                           overwrite_file=False)
     print (f"({device['name']}) Success: Upload completed.")
 
-@exception_handler
 def install_add(net_connect, device):
     """ 
     Using install command add the upgrade image to the device's image 
@@ -206,7 +205,6 @@ def install_add(net_connect, device):
     net_connect.send_command(f"install add file flash:{device['target-version']}", read_timeout=660)
     print(f"({device['name']}) Success: The new image was added.")
 
-@exception_handler
 def verify_and_run_install_add(net_connect, device):
     """
     Add the image to the device's image repository only if the MD5 checksum is 
@@ -219,6 +217,7 @@ def verify_and_run_install_add(net_connect, device):
     else:
         print(f"({device['name']}) Error: Aborting the upgrade.")
 
+@exception_handler
 def add_image_process(device, username, password):
     """
     Adds the image to the device's image repository after running space and 
@@ -230,7 +229,7 @@ def add_image_process(device, username, password):
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)     
         print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
-        enough_space, image_exists = verify_space_iosxe(device, net_connect, 
+        enough_space, image_exists = verify_space_iosxe(device, net_connect,
                                                         device["target-version"])
         if enough_space == 'True' and image_exists == 'False':
             print(f"({device['name']}) Success: Device has space and image doesn't exist.")
@@ -275,7 +274,7 @@ def commit_image(device, username, password):
     Commits the new image using install commit command.
     """
     if device['type'] == 'cisco_xe':
-        net_connect = open_connection(device, username, password)   
+        net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Starting to commit the new image.")
         print(f"({device['name']}) Commit the new image.")
         net_connect.send_command('install commit', read_timeout=660)
@@ -357,11 +356,11 @@ def main():
     # Print the welcome banner.
     banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
     print("\n")
-    print(termcolor.colored(banner, 'red'))
+    print(termcolor.colored(banner, "cyan"))
 
     # Create the command parser.
     parser = argparse.ArgumentParser(description="Shell application for running upgrades.")
-    parser.add_argument("operation", type=str, help= """Choose the operation to be performed: info, 
+    parser.add_argument("operation", type=str, help= """Choose the operation to be performed: info,
                         add, activate, commit, clean, full-install""")
     parser.add_argument("-u", "--username", type=str, help="Username of the admin user.")
     parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
