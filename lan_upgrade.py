@@ -22,7 +22,7 @@ import termcolor
 
 # FUNCTION DEFINITIONS
 
-def exception_handler_device_netmiko(func):
+def exception_handler(func):
     """
     Decorator to catch Netmiko connection exceptions. 
     Returns the function or exits the program if an exception occurs.
@@ -36,20 +36,23 @@ def exception_handler_device_netmiko(func):
         except netmiko.exceptions.NetmikoTimeoutException as err:
             print(f"({device['name']}) Error: Device connection time out: {err}")
             return sys.exit(1)
-    return inner_function
-
-def exception_handler_device_general(func):
-    """
-    Catches the general Exception if a specified exception handling hasn't been defined.
-    Returns the function or exits the program if an exception occurs.
-    """
-    def inner_function(device, username, password, *args, **kwargs):
-        try:
-            return func(device, username, password, *args, **kwargs)
         except Exception as err:
             print (f"({device['name']}) Error: {err}")
             return sys.exit(1)
     return inner_function
+
+# def exception_handler_device_general(func):
+#     """
+#     Catches the general Exception if a specified exception handling hasn't been defined.
+#     Returns the function or exits the program if an exception occurs.
+#     """
+#     def inner_function(device, username, password, *args, **kwargs):
+#         try:
+#             return func(device, username, password, *args, **kwargs)
+#         except Exception as err:
+#             print (f"({device['name']}) Error: {err}")
+#             return sys.exit(1)
+#     return inner_function
 
 def run_multithreaded(function, inventory, username, password):
     """
@@ -73,7 +76,7 @@ def run_multithreaded(function, inventory, username, password):
     for thread in config_threads_list:
         thread.join()
 
-@exception_handler_device_netmiko
+@exception_handler
 def open_connection(device, username, password):
     """
     Open as connection to the target device. 
@@ -161,7 +164,7 @@ def check_md5(file):
     print(f"(Global) Info: Expected MD5 hash is {md5}")
     return md5
 
-@exception_handler_device_general
+@exception_handler
 def verify_md5(net_connect, device, md5):
     """
     Verify that the MD5 checksum is as expected.
@@ -184,7 +187,7 @@ def verify_md5(net_connect, device, md5):
         result = False
     return md5_verified
 
-@exception_handler_device_general
+@exception_handler
 def enable_scp(net_connect, device):
     """
     Enable SCP server on the target device.
@@ -201,7 +204,7 @@ def enable_scp(net_connect, device):
     net_connect.send_config_set(commands)
     print(f"({device['name']}) Success: Enabled SCP server and exec-timeout increased.")
 
-@exception_handler_device_general
+@exception_handler
 def copy_upgrade_image(net_connect, device):
     """
     Upload the image to the target device using SCP file transfer.
@@ -219,7 +222,7 @@ def copy_upgrade_image(net_connect, device):
         )
     print (f"({device['name']}) Success: Upload completed.")
 
-@exception_handler_device_general
+@exception_handler
 def install_add(net_connect, device):
     """ 
     Using install command add the upgrade image to the device's image 
@@ -232,7 +235,7 @@ def install_add(net_connect, device):
     net_connect.send_command(f"install add file flash:{device['target-version']}", read_timeout=660)
     print(f"({device['name']}) Success: The new image was added.")
 
-@exception_handler_device_general
+@exception_handler
 def verify_and_run_install_add(net_connect, device):
     """
     Add the image to the device's image repository only if the MD5 checksum is 
@@ -276,7 +279,7 @@ def add_image_process(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
-@exception_handler_device_general
+@exception_handler
 def activate_image(device, username, password):
     """ 
     Activates the new image using install activate command. The reload is auto-
@@ -298,7 +301,7 @@ def activate_image(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
-@exception_handler_device_general
+@exception_handler
 def commit_image(device, username, password):
     """ 
     Commits the new image using install commit command.
@@ -316,7 +319,7 @@ def commit_image(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
-@exception_handler_device_general
+@exception_handler
 def clean_disk(device, username, password):
     """ 
     Clean the device flash from inactive and unused images in order to free up
@@ -337,7 +340,7 @@ def clean_disk(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
-@exception_handler_device_general
+@exception_handler
 def full_install_no_prompts(device, username, password):
     """ 
     Adds, activate and commits the image using install commands without raising prompts for the 
@@ -359,7 +362,7 @@ def full_install_no_prompts(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
-@exception_handler_device_general
+@exception_handler
 def find_devices_in_bundle_mode(device, username, password):
     """
     Scans the device configuration to find whether the device is in bundle mode.
