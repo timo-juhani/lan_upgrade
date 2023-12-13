@@ -22,6 +22,35 @@ import termcolor
 
 # FUNCTION DEFINITIONS
 
+def exception_handler_device_netmiko(func):
+    """
+    Decorator to catch Netmiko connection exceptions. 
+    Returns the function or exits the program if an exception occurs.
+    """
+    def inner_function(device, username, password, *args, **kwargs):
+        try:
+            return func(device, username, password, *args, **kwargs)
+        except netmiko.exceptions.NetmikoAuthenticationException as err:
+            print(f"({device['name']}) Error: Authentication to device failed: {err}")
+            return sys.exit(1)
+        except netmiko.exceptions.NetmikoTimeoutException as err:
+            print(f"({device['name']}) Error: Device connection time out: {err}")
+            return sys.exit(1)
+    return inner_function
+
+def exception_handler_device_general(func):
+    """
+    Catches the general Exception if a specified exception handling hasn't been defined.
+    Returns the function or exits the program if an exception occurs.
+    """
+    def inner_function(device, username, password, *args, **kwargs):
+        try:
+            return func(device, username, password, *args, **kwargs)
+        except Exception as err:
+            print (f"({device['name']}) Error: {err}")
+            return sys.exit(1)
+    return inner_function
+
 def run_multithreaded(function, inventory, username, password):
     """
     Use multithreading for updating multiple devicese simultaneously instead
@@ -44,27 +73,19 @@ def run_multithreaded(function, inventory, username, password):
     for thread in config_threads_list:
         thread.join()
 
+@exception_handler_device_netmiko
 def open_connection(device, username, password):
     """
     Open as connection to the target device. 
     Returns a ConnectHandler object or an error. 
     """
-    # Try to connect to the device. Catch an authentication error and stop
-    # function gracefully.
-    try:
-        print(f"({device['name']}) Connecting to device.")
-        net_connect = netmiko.ConnectHandler(device_type=device['type'],
-                                            ip=device['ipaddr'],
-                                            username=username,
-                                            password=password,
-                                            )
-        return net_connect
-    except netmiko.exceptions.NetmikoAuthenticationException as err:
-        print(f"({device['name']}) Error: Connection to device failed: {err}")
-        return sys.exit(1)
-    except netmiko.exceptions.NetmikoTimeoutException as err:
-        print(f"({device['name']}) Error: Device connection time out: {err}")
-        return sys.exit(1)
+    print(f"({device['name']}) Connecting to device.")
+    net_connect = netmiko.ConnectHandler(device_type=device['type'],
+                                        ip=device['ipaddr'],
+                                        username=username,
+                                        password=password,
+                                        )
+    return net_connect
 
 def print_inventory(inventory_file_path):
     """
@@ -140,6 +161,7 @@ def check_md5(file):
     print(f"(Global) Info: Expected MD5 hash is {md5}")
     return md5
 
+@exception_handler_device_general
 def verify_md5(net_connect, device, md5):
     """
     Verify that the MD5 checksum is as expected.
@@ -162,63 +184,55 @@ def verify_md5(net_connect, device, md5):
         result = False
     return md5_verified
 
+@exception_handler_device_general
 def enable_scp(net_connect, device):
     """
     Enable SCP server on the target device.
     """
-    try:
-        # SCP is enabled if not already enabled. Line exec-timeout is increased
-        # to ensure the image has time to upload properly.
-        print(f"({device['name']}) Enabling SCP server now.")
-        commands = [
-            "ip scp server enable", 
-            "line vty 0 4", 
-            "exec-timeout 60"
-            ]
-        net_connect.send_config_set(commands)
-        print(f"({device['name']}) Success: Enabled SCP server and increased",
-              "exec-timeout.")
-    except Exception as err:
-        print (f"({device['name']}) Error: Enabling SCP failed: {err}")
-        sys.exit(1)
+    #try:
+    # SCP is enabled if not already enabled. Line exec-timeout is increased
+    # to ensure the image has time to upload properly.
+    print(f"({device['name']}) Enabling SCP server now.")
+    commands = [
+        "ip scp server enable", 
+        "line vty 0 4", 
+        "exec-timeout 60"
+        ]
+    net_connect.send_config_set(commands)
+    print(f"({device['name']}) Success: Enabled SCP server and exec-timeout increased.")
 
+@exception_handler_device_general
 def copy_upgrade_image(net_connect, device):
     """
     Upload the image to the target device using SCP file transfer.
     """
     # Create a new SSH connection and transfer the file over SCP.
     # If the file already exist don't overwrite it.
-    try:
-        print(f"({device['name']}) Uploading the image now.")
-        netmiko.file_transfer(
-                net_connect,
-                source_file=device["target-version"],
-                dest_file=device["target-version"],
-                file_system="flash:",
-                direction="put",
-                overwrite_file=False,
-            )
-        print (f"({device['name']}) Success: Upload completed.")
-    except Exception as err:
-        print (f"({device['name']}) Error: Upload failed: {err}")
+    print(f"({device['name']}) Uploading the image now.")
+    netmiko.file_transfer(
+            net_connect,
+            source_file=device["target-version"],
+            dest_file=device["target-version"],
+            file_system="flash:",
+            direction="put",
+            overwrite_file=False,
+        )
+    print (f"({device['name']}) Success: Upload completed.")
 
+@exception_handler_device_general
 def install_add(net_connect, device):
     """ 
     Using install command add the upgrade image to the device's image 
     repository.
     """
     print(f"({device['name']}) Starting to install the new image.")
-    try:
-        print(f"({device['name']}) Saving configuration.")
-        net_connect.send_command('write memory', read_timeout=60)
-        print(f"({device['name']}) Adding the new image.")
-        net_connect.send_command(f"install add file flash:{device['target-version']}",
-                                 read_timeout=660)
-        print(f"({device['name']}) Success: The new image was added.")
-    except Exception as err:
-        print(f"({device['name']}) Error: Adding the image failed: {err}")
-        sys.exit(1)
+    print(f"({device['name']}) Saving configuration.")
+    net_connect.send_command('write memory', read_timeout=60)
+    print(f"({device['name']}) Adding the new image.")
+    net_connect.send_command(f"install add file flash:{device['target-version']}", read_timeout=660)
+    print(f"({device['name']}) Success: The new image was added.")
 
+@exception_handler_device_general
 def verify_and_run_install_add(net_connect, device):
     """
     Add the image to the device's image repository only if the MD5 checksum is 
@@ -226,12 +240,8 @@ def verify_and_run_install_add(net_connect, device):
     """
     md5 = check_md5(device["target-version"])
     md5_verified = verify_md5(net_connect, device, md5)
-
     if md5_verified:
-        try:
-            install_add(net_connect,device)
-        except Exception as err:
-            print(err)
+        install_add(net_connect,device)
     else:
         print(f"({device['name']}) Error: Aborting the upgrade.")
 
@@ -255,20 +265,18 @@ def add_image_process(device, username, password):
             enable_scp(net_connect, device)
             copy_upgrade_image(net_connect, device)
             verify_and_run_install_add(net_connect, device)
-
         elif enough_space == 'False':
             print(f"({device['name']}) Error: Not enough space. Try 'install",
                 "remove inactive' on the device.")
-
         elif image_exists == 'True':
             print(f"({device['name']}) Target image exists.")
             verify_and_run_install_add(net_connect, device)
         net_connect.disconnect()
-
-    else:                             
+    else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+@exception_handler_device_general
 def activate_image(device, username, password):
     """ 
     Activates the new image using install activate command. The reload is auto-
@@ -277,26 +285,20 @@ def activate_image(device, username, password):
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)   
         print(f"({device['name']}) Starting to activate the new image.")
-        try:
-            print(f"({device['name']}) Activating the new image.")
-            net_connect.send_command('install activate',
-                                    read_timeout=660,
-                                    expect_string=r"This operation may require a reload of the system. Do you want to proceed"
-                                    )
-            net_connect.send_command('y')
-            print(f"({device['name']}) Success: Reload was approved.")
-            print(f"({device['name']}) Success: New image activated. Reloading.")
-
-        except Exception as err:
-            print(f"({device['name']}) Error: Activating the image failed: {err}")
-            sys.exit(1)
-
+        print(f"({device['name']}) Activating the new image.")
+        net_connect.send_command('install activate',
+                                read_timeout=660,
+                                expect_string=r"This operation may require a reload of the system. Do you want to proceed"
+                                )
+        net_connect.send_command('y')
+        print(f"({device['name']}) Success: Reload was approved.")
+        print(f"({device['name']}) Success: New image activated. Reloading.")
         net_connect.disconnect()
-
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+@exception_handler_device_general
 def commit_image(device, username, password):
     """ 
     Commits the new image using install commit command.
@@ -304,22 +306,17 @@ def commit_image(device, username, password):
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)   
         print(f"({device['name']}) Starting to commit the new image.")
-        try:
-            print(f"({device['name']}) Commit the new image.")
-            net_connect.send_command('install commit',
+        print(f"({device['name']}) Commit the new image.")
+        net_connect.send_command('install commit',
                                     read_timeout=660,
                                     )
-            print(f"({device['name']}) Success: Commit complete. Device upgraded.")
-
-        except Exception as err:
-            print(f"({device['name']}) Error: commiting the image failed: {err}")
-            sys.exit(1)
-
+        print(f"({device['name']}) Success: Commit complete. Device upgraded.")
         net_connect.disconnect()
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+@exception_handler_device_general
 def clean_disk(device, username, password):
     """ 
     Clean the device flash from inactive and unused images in order to free up
@@ -328,24 +325,19 @@ def clean_disk(device, username, password):
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)   
         print(f"({device['name']}) Starting to clean the device from inactive images.")
-        try:
-            net_connect.send_command('install remove inactive',
-                                    read_timeout=660,
-                                    expect_string=r"Do you want to remove the above files"
-                                    )
-            net_connect.send_command('y')
-            print(f"({device['name']}) Success: Clean complete.")
-
-        except Exception as err:
-            print(f"({device['name']}) Error: Clean failed: {err}")
-            sys.exit(1)
-
+        net_connect.send_command('install remove inactive',
+                                read_timeout=660,
+                                expect_string=r"Do you want to remove the above files"
+                                )
+        net_connect.send_command('y')
+        print(f"({device['name']}) Success: Clean complete.")
         net_connect.disconnect()
 
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+@exception_handler_device_general
 def full_install_no_prompts(device, username, password):
     """ 
     Adds, activate and commits the image using install commands without raising prompts for the 
@@ -354,25 +346,20 @@ def full_install_no_prompts(device, username, password):
     """
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)
-        try:
-            print(f"({device['name']}) Saving configuration.")
-            net_connect.send_command('write memory', read_timeout=60)
-            print(f"({device['name']}) Starting full install without prompts.")
-            net_connect.send_command(f"install add file flash:{device['target-version']} activate commit prompt-level none",
-                                    read_timeout=900,
-                                    )
-            print(f"({device['name']}) Success: Full install complete. Device rebooting.")
-
-        except Exception as err:
-            print(f"({device['name']}) Error: Full install failed: {err}")
-            sys.exit(1)
-
+        print(f"({device['name']}) Saving configuration.")
+        net_connect.send_command('write memory', read_timeout=60)
+        print(f"({device['name']}) Starting full install without prompts.")
+        net_connect.send_command(f"install add file flash:{device['target-version']} activate commit prompt-level none",
+                                read_timeout=900,
+                                )
+        print(f"({device['name']}) Success: Full install complete. Device rebooting.")
         net_connect.disconnect()
 
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+@exception_handler_device_general
 def find_devices_in_bundle_mode(device, username, password):
     """
     Scans the device configuration to find whether the device is in bundle mode.
@@ -381,14 +368,8 @@ def find_devices_in_bundle_mode(device, username, password):
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Getting show commands.")
-        try:
-            print(f"({device['name']}) Get 'show version'.")
-            output = net_connect.send_command('show version', read_timeout=60)
-
-        except Exception as err:
-            print(f"({device['name']}) Error: Getting show commands failed: {err}")
-            sys.exit(1)
-
+        print(f"({device['name']}) Get 'show version'.")
+        output = net_connect.send_command('show version', read_timeout=60)
         net_connect.disconnect()
         if "BUNDLE" in output:
             msg = "Warning: Device in BUNDLE mode. Convert to INSTALL before upgrade."
