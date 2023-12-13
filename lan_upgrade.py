@@ -24,7 +24,7 @@ import termcolor
 
 def exception_handler(func):
     """
-    Decorator to catch Netmiko connection exceptions. 
+    Decorator to catch exceptions. 
     Returns the function or exits the program if an exception occurs.
     """
     def inner_function(device, username, password, *args, **kwargs):
@@ -41,19 +41,6 @@ def exception_handler(func):
             return sys.exit(1)
     return inner_function
 
-# def exception_handler_device_general(func):
-#     """
-#     Catches the general Exception if a specified exception handling hasn't been defined.
-#     Returns the function or exits the program if an exception occurs.
-#     """
-#     def inner_function(device, username, password, *args, **kwargs):
-#         try:
-#             return func(device, username, password, *args, **kwargs)
-#         except Exception as err:
-#             print (f"({device['name']}) Error: {err}")
-#             return sys.exit(1)
-#     return inner_function
-
 def run_multithreaded(function, inventory, username, password):
     """
     Use multithreading for updating multiple devicese simultaneously instead
@@ -64,11 +51,8 @@ def run_multithreaded(function, inventory, username, password):
     for hostname, device in inventory.items():
         print(f"({device['name']}) Creating a thread.")
         # The name of the thread is the name of the device being configured.
-        config_threads_list.append(threading.Thread(target=function,
-                                                    name=hostname,
-                                                    args=(device,
-                                                        username,
-                                                        password)))
+        config_threads_list.append(threading.Thread(target=function, name=hostname, args=(device,
+                                                    username, password)))
     # Start threads. The use of .join() allows the main execution of all threads
     # finish before the main program ends.
     for thread in config_threads_list:
@@ -83,11 +67,8 @@ def open_connection(device, username, password):
     Returns a ConnectHandler object or an error. 
     """
     print(f"({device['name']}) Connecting to device.")
-    net_connect = netmiko.ConnectHandler(device_type=device['type'],
-                                        ip=device['ipaddr'],
-                                        username=username,
-                                        password=password,
-                                        )
+    net_connect = netmiko.ConnectHandler(device_type=device['type'], ip=device['ipaddr'],
+                                        username=username, password=password)
     return net_connect
 
 def print_inventory(inventory_file_path):
@@ -111,16 +92,12 @@ def read_inventory(inventory_file_path):
     with open(inventory_file_path, encoding='utf-8') as inventory:
         # The first line in CSV is a header which needs to be skipped.
         next(inventory)
-
         # After the header has been skipped devices can be loaded to the dict.
         for item in inventory:
             # Create a list of each device using comma delimeter (.csv)
             device_info = item.strip().split(',')
-            device = {'ipaddr': device_info[0],
-                      'type':   device_info[1],
-                      'name':   device_info[2],
-                      'target-version': device_info[3]
-                      }
+            device = {'ipaddr': device_info[0], 'type': device_info[1], 'name': device_info[2],
+                      'target-version': device_info[3]}
             # Each dictionary object is uniquely identified using hostname.
             devices[device['name']] = device
     return devices
@@ -174,8 +151,7 @@ def verify_md5(net_connect, device, md5):
     # Time out increased since verify command could take time.
     # Note that 5 min is an overkill but safe.
     result = net_connect.send_command(f"verify /md5 flash:{device['target-version']} {md5}",
-                                      read_timeout=300
-                                      )
+                                      read_timeout=300)
     # User Regex to find the Verified string from the CLI output.
     reg = re.compile(r'Verified')
     md5_verified = reg.findall(result)
@@ -212,14 +188,9 @@ def copy_upgrade_image(net_connect, device):
     # Create a new SSH connection and transfer the file over SCP.
     # If the file already exist don't overwrite it.
     print(f"({device['name']}) Uploading the image now.")
-    netmiko.file_transfer(
-            net_connect,
-            source_file=device["target-version"],
-            dest_file=device["target-version"],
-            file_system="flash:",
-            direction="put",
-            overwrite_file=False,
-        )
+    netmiko.file_transfer(net_connect, source_file=device["target-version"],
+                          dest_file=device["target-version"], file_system="flash:", direction="put", 
+                          overwrite_file=False)
     print (f"({device['name']}) Success: Upload completed.")
 
 @exception_handler
@@ -259,18 +230,16 @@ def add_image_process(device, username, password):
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)     
         print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
-        enough_space, image_exists = verify_space_iosxe(device,
-                                                        net_connect,
-                                                        device["target-version"]
-                                                        )
+        enough_space, image_exists = verify_space_iosxe(device, net_connect, 
+                                                        device["target-version"])
         if enough_space == 'True' and image_exists == 'False':
             print(f"({device['name']}) Success: Device has space and image doesn't exist.")
             enable_scp(net_connect, device)
             copy_upgrade_image(net_connect, device)
             verify_and_run_install_add(net_connect, device)
         elif enough_space == 'False':
-            print(f"({device['name']}) Error: Not enough space. Try 'install",
-                "remove inactive' on the device.")
+            print(f"({device['name']}) Error: Not enough space. Try 'install remove inactive' on ",
+                  "the device.")
         elif image_exists == 'True':
             print(f"({device['name']}) Target image exists.")
             verify_and_run_install_add(net_connect, device)
@@ -289,8 +258,7 @@ def activate_image(device, username, password):
         net_connect = open_connection(device, username, password)   
         print(f"({device['name']}) Starting to activate the new image.")
         print(f"({device['name']}) Activating the new image.")
-        net_connect.send_command('install activate',
-                                read_timeout=660,
+        net_connect.send_command('install activate', read_timeout=660,
                                 expect_string=r"This operation may require a reload of the system. Do you want to proceed"
                                 )
         net_connect.send_command('y')
@@ -310,9 +278,7 @@ def commit_image(device, username, password):
         net_connect = open_connection(device, username, password)   
         print(f"({device['name']}) Starting to commit the new image.")
         print(f"({device['name']}) Commit the new image.")
-        net_connect.send_command('install commit',
-                                    read_timeout=660,
-                                    )
+        net_connect.send_command('install commit', read_timeout=660)
         print(f"({device['name']}) Success: Commit complete. Device upgraded.")
         net_connect.disconnect()
     else:
@@ -328,14 +294,11 @@ def clean_disk(device, username, password):
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)   
         print(f"({device['name']}) Starting to clean the device from inactive images.")
-        net_connect.send_command('install remove inactive',
-                                read_timeout=660,
-                                expect_string=r"Do you want to remove the above files"
-                                )
+        net_connect.send_command('install remove inactive', read_timeout=660,
+                                expect_string=r"Do you want to remove the above files")
         net_connect.send_command('y')
         print(f"({device['name']}) Success: Clean complete.")
         net_connect.disconnect()
-
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
@@ -353,11 +316,9 @@ def full_install_no_prompts(device, username, password):
         net_connect.send_command('write memory', read_timeout=60)
         print(f"({device['name']}) Starting full install without prompts.")
         net_connect.send_command(f"install add file flash:{device['target-version']} activate commit prompt-level none",
-                                read_timeout=900,
-                                )
+                                read_timeout=900)
         print(f"({device['name']}) Success: Full install complete. Device rebooting.")
         net_connect.disconnect()
-
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
@@ -400,14 +361,8 @@ def main():
 
     # Create the command parser.
     parser = argparse.ArgumentParser(description="Shell application for running upgrades.")
-    parser.add_argument("operation", type=str,
-                    help= """Choose the operation to be performed:
-                    info,
-                    add,
-                    activate,
-                    commit,
-                    clean,
-                    full-install""")
+    parser.add_argument("operation", type=str, help= """Choose the operation to be performed: info, 
+                        add, activate, commit, clean, full-install""")
     parser.add_argument("-u", "--username", type=str, help="Username of the admin user.")
     parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
     parser.add_argument("-i", "--inventory", type=bool, help="Display the inventory.",
