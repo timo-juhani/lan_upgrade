@@ -368,6 +368,10 @@ def main():
                         action=argparse.BooleanOptionalAction)
     parser.add_argument("-b", "--bundle", type=bool, help="Display devices in bundle mode.",
                         action=argparse.BooleanOptionalAction)
+    parser.add_argument("-H", "--hostname", type=str, help="HOST mode: hostname.")
+    parser.add_argument("-O", "--os", type=str, help="HOST mode: OS type (cisco_xe).")
+    parser.add_argument("-S", "--software", type=str, help="HOST mode: Software image (*.bin).")
+    parser.add_argument("-T", "--target", type=str, help="HOST mode: IP address.")
     args = parser.parse_args()
 
     # Save variables from arguments provided by the user.
@@ -376,6 +380,12 @@ def main():
     password = args.password
     show_inventory = args.inventory
     scan_for_bundle = args.bundle
+    hostname = args.hostname
+    operating_system = args.os
+    software_version = args.software
+    target = args.target
+    device = {hostname: {'ipaddr': target, 'type': operating_system, 'name': hostname,
+              'target-version': software_version}}
 
     # Start logging.
     # If there is an old log file delete it first.
@@ -391,9 +401,21 @@ def main():
         password = getpass.getpass(prompt ="Management password: ")
 
     # Inventory is hardcoded as inventory.csv for simplicity.
-    # Print the inventory and then read it.
     inventory_file_path = "inventory.csv"
-    inventory = read_inventory(inventory_file_path)
+
+    # Run the program in either HOST or INVENTORY mode. 
+    # HOST gets a single device parameters as arguments whereas INVENTORY is just read from .csv.
+    if (hostname is not None and operating_system is not None and software_version is not None
+        and target is not None):
+        print(termcolor.colored("Success: Entering HOST mode.", "green"))
+        inventory = device
+    elif (hostname is None or operating_system is None or software_version is None
+            or target is None):
+        msg = "Error: HOST mode requires hostname, os, software and target flag - check your flags."
+        print(termcolor.colored(msg, "red"))
+        sys.exit(1)
+    else:
+        inventory = read_inventory(inventory_file_path)
 
     # Depending on the selected positional argument run a different action
     # using multithreading against the list of devices defined in inventory.csv.
@@ -412,9 +434,11 @@ def main():
     elif operation == "info" and scan_for_bundle is True:
         run_multithreaded(find_devices_in_bundle_mode, inventory, username, password)
     elif operation == "info":
-        print("Please choose an info switch.")
+        msg = "Warning: Please choose an info switch."
+        print(termcolor.colored(msg, "yellow"))
     else:
-        print(f"Operation not supported: {args.operation}")
+        msg = f"Error: Operation not supported: {args.operation}"
+        print(termcolor.colored(msg, "red"))
 
 # EXECUTION
 
