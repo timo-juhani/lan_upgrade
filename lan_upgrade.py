@@ -280,6 +280,24 @@ def add_image_process(device, username, password):
     image existence checks, copying the image to the device and verifying that 
     the MD5 checksum matches with the expected.
     """
+    # Adding an image is a process like it or not. First you have to check if there is enough space
+    # on the disk to even attempt it. But also it makes sense to check if the target image already
+    # exists on the device. This way time will be saved for moving images around is a time taking
+    # task.
+    #
+    # The first scenario covers a situation when there is enough space but the image is not yet on
+    # flash. In this case the program ensure that SCP is enabled and SSH timeout are generous to
+    # improve probability of success. After that SCP upload is used to move the image to the device.
+    # Then after verifying the MD5 hash the image will be added to the image repository.
+    #
+    # The second scenario covers another situation in which there is not enough space on flash. The
+    # program stops execution for that device and asks to clean up some space.
+    #
+    # The third scenario covers one more situation in which the image is already on the device. In
+    # that case the program proceeds as in first scenario but skips moving around the image with
+    # SCP.
+    #
+    # All this said everything begins from a logic check:
     # Check that the device has been defined as IOS-XE device in the inventory.
     # If it's not exit the function gracefully.
     # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST
