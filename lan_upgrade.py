@@ -388,8 +388,8 @@ def full_install_no_prompts(device, username, password):
         print(f"({device['name']}) Saving configuration.")
         net_connect.send_command('write memory', read_timeout=60)
         print(f"({device['name']}) Starting full install without prompts.")
-        net_connect.send_command(f"install add file flash:{device['target-version']} activate commit prompt-level none",
-                                read_timeout=900)
+        cmd = f"install add file flash:{device['target-version']} activate commit prompt-level none"
+        net_connect.send_command(cmd, read_timeout=900)
         print(f"({device['name']}) Success: Full install complete. Device rebooting.")
         net_connect.disconnect()
     elif device["upgrade"] == "no":
@@ -409,7 +409,6 @@ def find_bundle_mode(device, username, password):
     """
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)
-        print(f"({device['name']}) Getting show commands.")
         print(f"({device['name']}) Get 'show version'.")
         output = net_connect.send_command('show version', read_timeout=60)
         net_connect.disconnect()
@@ -430,19 +429,25 @@ def find_bundle_mode(device, username, password):
 def find_ios_version(device, username, password):
     """
     Scans the device(s) for IOS version.
-    Prints the version.
+    Prints the version and if the device needs to be upgraded.
     """
     if device['type'] == 'cisco_xe':
+        target_version = device["target-version"].removesuffix(".SPA.bin")
+        reg = re.compile(r"\S{1,2}.\S{1,2}.\S{1,3}$")
+        target_version = reg.findall(target_version)[0]
         net_connect = open_connection(device, username, password)
-        print(f"({device['name']}) Getting show commands.")
         print(f"({device['name']}) Get 'show version'.")
         output = net_connect.send_command('show version', read_timeout=60)
         net_connect.disconnect()
         for line in output.split("\n"):
             if 'Cisco IOS XE Software' in line:
-                software_version = line.split(",")[1]
-                msg = f"Success: {software_version}"
-                print(termcolor.colored(f"({device['name']}) {msg}", "green"))
+                running_version = line.split(",")[1].removeprefix(" Version ")
+                if running_version == target_version:
+                    msg = f"Success: Running {running_version}, Target {target_version}"
+                    print(termcolor.colored(f"({device['name']}) {msg}", "green"))
+                else:
+                    msg = f"Warning: Running {running_version}, Target {target_version} -> UPGRADE!"
+                    print(termcolor.colored(f"({device['name']}) {msg}", "yellow"))
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
