@@ -44,6 +44,38 @@ def exception_handler(func):
             return sys.exit(1)
     return inner_function
 
+def create_parser():
+    """
+    Create a parser that the user can use to provide program arguments.
+    Returns the parser
+    """
+    parser = argparse.ArgumentParser(description="Shell application for running upgrades.")
+    parser.add_argument("operation", type=str, help= """Choose the operation to be performed: info,
+                        add, activate, commit, clean, full-install""")
+    parser.add_argument("-u", "--username", type=str, help="Username of the admin user.")
+    parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
+    parser.add_argument("-I", "--inventorymode", type=bool, help="INVENTORY mode: enable.",
+                        action=argparse.BooleanOptionalAction)
+    parser.add_argument("-i", "--inventory", type=bool, help="Display inventory.",
+                        action=argparse.BooleanOptionalAction)
+    parser.add_argument("-b", "--bundle", type=bool, help="Display devices in bundle mode.",
+                        action=argparse.BooleanOptionalAction)
+    parser.add_argument("-s", "--scansoftware", type=bool, help="Display software versions.",
+                        action=argparse.BooleanOptionalAction)
+    parser.add_argument("-H", "--hostname", type=str, help="HOST mode: hostname.")
+    parser.add_argument("-O", "--os", type=str, help="HOST mode: OS type (cisco_xe).")
+    parser.add_argument("-S", "--software", type=str, help="HOST mode: Software image (*.bin).")
+    parser.add_argument("-T", "--target", type=str, help="HOST mode: IP address.")
+    return parser
+
+def create_banner():
+    """
+    Create a banner to show when program is executed.
+    """
+    banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
+    print("\n")
+    print(termcolor.colored(banner, "cyan"))
+
 def run_multithreaded(function, inventory, username, password):
     """
     Use multithreading for updating multiple devicese simultaneously instead
@@ -104,6 +136,26 @@ def read_inventory(inventory_file_path):
             # Each dictionary object is uniquely identified using hostname.
             devices[device['name']] = device
     return devices
+
+def choose_mode(args, device, inventory_file_path):
+    """
+    Based on the arguments provided (or not) the program enters in either INVENTORY or HOST mode. 
+    Returns inventory as a result - either based on inventory.csv or CLI arguments for a single
+    host. 
+    """
+    if (args.hostname is not None and args.os is not None and args.software is not None
+        and args.target is not None):
+        print(termcolor.colored("Success: Entering HOST mode.", "green"))
+        inventory = device
+        return inventory
+    if (args.hostname is None or args.os is None or args.software is None
+          or args.target is None) and args.inventorymode is False:
+        msg = "Error: HOST mode requires hostname, os, software and target flag - check your flags."
+        print(termcolor.colored(msg, "red"))
+        return sys.exit(1)
+
+    inventory = read_inventory(inventory_file_path)
+    return inventory
 
 def verify_space_iosxe(device, net_connect,file):
     """
@@ -395,6 +447,33 @@ def find_ios_version(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+def operation_logic(args, inventory, username, password, inventory_file_path):
+    """
+    Chooses an operation based on arguments provided by the user.
+    """
+    if args.operation == "add":
+        run_multithreaded(add_image_process, inventory, username, password)
+    elif args.operation == "activate":
+        run_multithreaded(activate_image, inventory, username, password)
+    elif args.operation == "commit":
+        run_multithreaded(commit_image, inventory, username, password)
+    elif args.operation == "clean":
+        run_multithreaded(clean_disk, inventory, username, password)
+    elif args.operation == "full-install":
+        run_multithreaded(full_install_no_prompts, inventory, username, password)
+    elif args.operation == "info" and args.inventory is True:
+        print_inventory(inventory_file_path)
+    elif args.operation == "info" and args.bundle is True:
+        run_multithreaded(find_bundle_mode, inventory, username, password)
+    elif args.operation == "info" and args.scansoftware is True:
+        run_multithreaded(find_ios_version, inventory, username, password)
+    elif args.operation == "info":
+        msg = "Warning: Please choose an info switch."
+        print(termcolor.colored(msg, "yellow"))
+    else:
+        msg = f"Error: Operation not supported: {args.operation}"
+        print(termcolor.colored(msg, "red"))
+
 # MAIN FUNCTION
 
 def main():
@@ -402,44 +481,17 @@ def main():
     Executes the main program. 
     """
     # Print the welcome banner.
-    banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
-    print("\n")
-    print(termcolor.colored(banner, "cyan"))
+    create_banner()
 
     # Create the command parser.
-    parser = argparse.ArgumentParser(description="Shell application for running upgrades.")
-    parser.add_argument("operation", type=str, help= """Choose the operation to be performed: info,
-                        add, activate, commit, clean, full-install""")
-    parser.add_argument("-u", "--username", type=str, help="Username of the admin user.")
-    parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
-    parser.add_argument("-I", "--inventorymode", type=bool, help="INVENTORY mode: enable.",
-                        action=argparse.BooleanOptionalAction)
-    parser.add_argument("-i", "--inventory", type=bool, help="Display inventory.",
-                        action=argparse.BooleanOptionalAction)
-    parser.add_argument("-b", "--bundle", type=bool, help="Display devices in bundle mode.",
-                        action=argparse.BooleanOptionalAction)
-    parser.add_argument("-s", "--scansoftware", type=bool, help="Display software versions.",
-                        action=argparse.BooleanOptionalAction)
-    parser.add_argument("-H", "--hostname", type=str, help="HOST mode: hostname.")
-    parser.add_argument("-O", "--os", type=str, help="HOST mode: OS type (cisco_xe).")
-    parser.add_argument("-S", "--software", type=str, help="HOST mode: Software image (*.bin).")
-    parser.add_argument("-T", "--target", type=str, help="HOST mode: IP address.")
+    parser = create_parser()
     args = parser.parse_args()
 
     # Save variables from arguments provided by the user.
-    operation = args.operation
     username = args.username
     password = args.password
-    inventory_mode = args.inventorymode
-    inventory_display = args.inventory
-    scan_for_bundle = args.bundle
-    scan_for_versions = args.scansoftware
-    hostname = args.hostname
-    operating_system = args.os
-    software_version = args.software
-    target = args.target
-    device = {hostname: {"ipaddr": target, "type": operating_system, "name": hostname,
-              "target-version": software_version, "upgrade": "yes"}}
+    device = {args.hostname: {"ipaddr": args.target, "type": args.os, "name": args.hostname,
+              "target-version": args.software, "upgrade": "yes"}}
 
     # Start logging.
     # If there is an old log file delete it first.
@@ -449,52 +501,21 @@ def main():
     logging.basicConfig(filename=console_file, level=logging.DEBUG)
 
     # Ask for administrative credentials if those haven't been provided as arguments.
-    if username is None:
+    if args.username is None:
         username = input("Management username: ")
-    if password is None:
+    if args.password is None:
         password = getpass.getpass(prompt ="Management password: ")
 
     # Inventory is hardcoded as inventory.csv for simplicity.
     inventory_file_path = "inventory.csv"
 
-    # Run the program in either HOST or INVENTORY mode. 
+    # Run the program in either HOST or INVENTORY mode.
     # HOST gets a single device parameters as arguments whereas INVENTORY is just read from .csv.
-    if (hostname is not None and operating_system is not None and software_version is not None
-        and target is not None):
-        print(termcolor.colored("Success: Entering HOST mode.", "green"))
-        inventory = device
-    elif (hostname is None or operating_system is None or software_version is None
-            or target is None) and inventory_mode is False:
-        msg = "Error: HOST mode requires hostname, os, software and target flag - check your flags."
-        print(termcolor.colored(msg, "red"))
-        sys.exit(1)
-    else:
-        inventory = read_inventory(inventory_file_path)
+    inventory = choose_mode(args, device, inventory_file_path)
 
     # Depending on the selected positional argument run a different action
     # using multithreading against the list of devices defined in inventory.csv.
-    if operation == "add":
-        run_multithreaded(add_image_process, inventory, username, password)
-    elif operation == "activate":
-        run_multithreaded(activate_image, inventory, username, password)
-    elif operation == "commit":
-        run_multithreaded(commit_image, inventory, username, password)
-    elif operation == "clean":
-        run_multithreaded(clean_disk, inventory, username, password)
-    elif operation == "full-install":
-        run_multithreaded(full_install_no_prompts, inventory, username, password)
-    elif operation == "info" and inventory_display is True:
-        print_inventory(inventory_file_path)
-    elif operation == "info" and scan_for_bundle is True:
-        run_multithreaded(find_bundle_mode, inventory, username, password)
-    elif operation == "info" and scan_for_versions is True:
-        run_multithreaded(find_ios_version, inventory, username, password)
-    elif operation == "info":
-        msg = "Warning: Please choose an info switch."
-        print(termcolor.colored(msg, "yellow"))
-    else:
-        msg = f"Error: Operation not supported: {args.operation}"
-        print(termcolor.colored(msg, "red"))
+    operation_logic(args, inventory, username, password, inventory_file_path)
 
 # EXECUTION
 
