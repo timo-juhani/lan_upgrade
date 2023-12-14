@@ -412,12 +412,12 @@ def find_bundle_mode(device, username, password):
         print(f"({device['name']}) Get 'show version'.")
         output = net_connect.send_command('show version', read_timeout=60)
         net_connect.disconnect()
-        # Find if either BUNDLE or INSTALL exists in the command output. Both of these are 
-        # indicators of the installation mode used for the device. Both modes require different 
+        # Find if either BUNDLE or INSTALL exists in the command output. Both of these are
+        # indicators of the installation mode used for the device. Both modes require different
         # approach or conversion when upgrading which is the reason why it must be known by the user
-        # before upgrades are started. Give a warning to the user when BUNDLE mode is used. And 
-        # although there's nothing wrong with that Cisco recommends using INSTALL mode therefore 
-        # this program also relies on INSTALL mode only. 
+        # before upgrades are started. Give a warning to the user when BUNDLE mode is used. And
+        # although there's nothing wrong with that Cisco recommends using INSTALL mode therefore
+        # this program also relies on INSTALL mode only.
         if "BUNDLE" in output:
             msg = "Warning: Device in BUNDLE mode. Convert to INSTALL before upgrade."
             print(termcolor.colored(f"({device['name']}) {msg}", "yellow"))
