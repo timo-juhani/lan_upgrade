@@ -14,6 +14,5 @@ as
 
 ## To Do: 
 - Convert from BUNDLE to INSTALL
-- Ability to upgrade one device at a time (-t)
 - Discover devices that need upgrade
 - Add upgrade tag to inventory

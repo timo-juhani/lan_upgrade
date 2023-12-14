@@ -1,2 +1,2 @@
-IP Address,OS,Hostname,Target Image
-10.1.1.1,cisco_xe,Switch-01,cat9k_lite_iosxe.17.06.05.SPA.bin
+IP Address,OS,Hostname,Target Image,Upgrade
+10.1.1.1,cisco_xe,Switch-01,cat9k_lite_iosxe.17.06.05.SPA.bin,yes

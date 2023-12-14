@@ -99,8 +99,8 @@ def read_inventory(inventory_file_path):
         for item in inventory:
             # Create a list of each device using comma delimeter (.csv)
             device_info = item.strip().split(',')
-            device = {'ipaddr': device_info[0], 'type': device_info[1], 'name': device_info[2],
-                      'target-version': device_info[3]}
+            device = {"ipaddr": device_info[0], "type": device_info[1], "name": device_info[2],
+                      "target-version": device_info[3], "upgrade": device_info[4]}
             # Each dictionary object is uniquely identified using hostname.
             devices[device['name']] = device
     return devices
@@ -158,7 +158,8 @@ def verify_md5(net_connect, device, md5):
     reg = re.compile(r'Verified')
     md5_verified = reg.findall(result)
     if md5_verified:
-        print(f"({device['name']}) Success: Image verification passed.")
+        msg = f"({device['name']}) Success: Image verification passed."
+        print(termcolor.colored(msg, "green"))
         result = True
     else:
         print(f"({device['name']}) Error: Image verification failed.")
@@ -179,7 +180,8 @@ def enable_scp(net_connect, device):
         "exec-timeout 60"
         ]
     net_connect.send_config_set(commands)
-    print(f"({device['name']}) Success: Enabled SCP server and exec-timeout increased.")
+    msg = f"({device['name']}) Success: Enabled SCP server and exec-timeout increased."
+    print(termcolor.colored(msg, "green"))
 
 def copy_upgrade_image(net_connect, device):
     """
@@ -191,7 +193,8 @@ def copy_upgrade_image(net_connect, device):
     netmiko.file_transfer(net_connect, source_file=device["target-version"],
                           dest_file=device["target-version"], file_system="flash:", direction="put",
                           overwrite_file=False)
-    print (f"({device['name']}) Success: Upload completed.")
+    msg = f"({device['name']}) Success: Upload completed."
+    print(termcolor.colored(msg, "green"))
 
 def install_add(net_connect, device):
     """ 
@@ -203,7 +206,8 @@ def install_add(net_connect, device):
     net_connect.send_command('write memory', read_timeout=60)
     print(f"({device['name']}) Adding the new image.")
     net_connect.send_command(f"install add file flash:{device['target-version']}", read_timeout=660)
-    print(f"({device['name']}) Success: The new image was added.")
+    msg = f"({device['name']}) Success: The new image was added."
+    print(termcolor.colored(msg, "green"))
 
 def verify_and_run_install_add(net_connect, device):
     """
@@ -226,13 +230,14 @@ def add_image_process(device, username, password):
     """
     # Check that the device has been defined as IOS-XE device in the inventory.
     # If it's not exit the function gracefully.
-    if device['type'] == 'cisco_xe':
+    if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)     
         print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
         enough_space, image_exists = verify_space_iosxe(device, net_connect,
                                                         device["target-version"])
         if enough_space == 'True' and image_exists == 'False':
-            print(f"({device['name']}) Success: Device has space and image doesn't exist.")
+            msg = f"({device['name']}) Success: Device has space and image doesn't exist."
+            print(termcolor.colored(msg, "green"))
             enable_scp(net_connect, device)
             copy_upgrade_image(net_connect, device)
             verify_and_run_install_add(net_connect, device)
@@ -243,8 +248,13 @@ def add_image_process(device, username, password):
             print(f"({device['name']}) Target image exists.")
             verify_and_run_install_add(net_connect, device)
         net_connect.disconnect()
+    elif device["upgrade"] == "no":
+        msg = f"({device['name']}) Error: Device not flagged to be upgraded (see inventory.csv)."
+        print(termcolor.colored(msg, "red"))
+        sys.exit(1)
     else:
-        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        msg = f"({device['name']}) Error: Device type {device['type']} not supported."
+        print(termcolor.colored(msg, "red"))
         sys.exit(1)
 
 @exception_handler
@@ -253,19 +263,24 @@ def activate_image(device, username, password):
     Activates the new image using install activate command. The reload is auto-
     approved after activation has compeleted.
     """
-    if device['type'] == 'cisco_xe':
-        net_connect = open_connection(device, username, password)   
+    if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
+        net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Starting to activate the new image.")
         print(f"({device['name']}) Activating the new image.")
         net_connect.send_command('install activate', read_timeout=660,
                                 expect_string=r"This operation may require a reload of the system. Do you want to proceed"
                                 )
         net_connect.send_command('y')
-        print(f"({device['name']}) Success: Reload was approved.")
-        print(f"({device['name']}) Success: New image activated. Reloading.")
+        msg = f"({device['name']}) Success: New image activated and reload approved. Reloading!"
+        print(termcolor.colored(msg, "green"))
         net_connect.disconnect()
+    elif device["upgrade"] == "no":
+        msg = f"({device['name']}) Error: Device not flagged to be upgraded (see inventory.csv)."
+        print(termcolor.colored(msg, "red"))
+        sys.exit(1)
     else:
-        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        msg = f"({device['name']}) Error: Device type {device['type']} not supported."
+        print(termcolor.colored(msg, "red"))
         sys.exit(1)
 
 @exception_handler
@@ -273,15 +288,21 @@ def commit_image(device, username, password):
     """ 
     Commits the new image using install commit command.
     """
-    if device['type'] == 'cisco_xe':
+    if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Starting to commit the new image.")
         print(f"({device['name']}) Commit the new image.")
         net_connect.send_command('install commit', read_timeout=660)
-        print(f"({device['name']}) Success: Commit complete. Device upgraded.")
+        msg = f"({device['name']}) Success: Commit complete. Device upgraded."
+        print(termcolor.colored(msg, "green"))
         net_connect.disconnect()
+    elif device["upgrade"] == "no":
+        msg = f"({device['name']}) Error: Device not flagged to be upgraded (see inventory.csv)."
+        print(termcolor.colored(msg, "red"))
+        sys.exit(1)
     else:
-        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        msg = f"({device['name']}) Error: Device type {device['type']} not supported."
+        print(termcolor.colored(msg, "red"))
         sys.exit(1)
 
 @exception_handler
@@ -296,7 +317,8 @@ def clean_disk(device, username, password):
         net_connect.send_command('install remove inactive', read_timeout=660,
                                 expect_string=r"Do you want to remove the above files")
         net_connect.send_command('y')
-        print(f"({device['name']}) Success: Clean complete.")
+        msg = f"({device['name']}) Success: Clean complete."
+        print(termcolor.colored(msg, "green"))
         net_connect.disconnect()
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
@@ -309,7 +331,7 @@ def full_install_no_prompts(device, username, password):
     user. It enables a one step install for users that doesn't require a phased approach with add, 
     activate and commit commands. 
     """
-    if device['type'] == 'cisco_xe':
+    if device["type"] == "cisco_xe" and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Saving configuration.")
         net_connect.send_command('write memory', read_timeout=60)
@@ -318,12 +340,17 @@ def full_install_no_prompts(device, username, password):
                                 read_timeout=900)
         print(f"({device['name']}) Success: Full install complete. Device rebooting.")
         net_connect.disconnect()
+    elif device["upgrade"] == "no":
+        msg = f"({device['name']}) Error: Device not flagged to be upgraded (see inventory.csv)."
+        print(termcolor.colored(msg, "red"))
+        sys.exit(1)
     else:
-        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        msg = f"({device['name']}) Error: Device type {device['type']} not supported."
+        print(termcolor.colored(msg, "red"))
         sys.exit(1)
 
 @exception_handler
-def find_devices_in_bundle_mode(device, username, password):
+def find_bundle_mode(device, username, password):
     """
     Scans the device configuration to find whether the device is in bundle mode.
     Returns true if in bundle mode or false if not. 
@@ -347,6 +374,27 @@ def find_devices_in_bundle_mode(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
+@exception_handler
+def find_ios_version(device, username, password):
+    """
+    Scans the device(s) for IOS version.
+    Prints the version.
+    """
+    if device['type'] == 'cisco_xe':
+        net_connect = open_connection(device, username, password)
+        print(f"({device['name']}) Getting show commands.")
+        print(f"({device['name']}) Get 'show version'.")
+        output = net_connect.send_command('show version', read_timeout=60)
+        net_connect.disconnect()
+        for line in output.split("\n"):
+            if 'Cisco IOS XE Software' in line:
+                software_version = line.split(",")[1]
+                msg = f"Success: {software_version}"
+                print(termcolor.colored(f"({device['name']}) {msg}", "green"))
+    else:
+        print (f"({device['name']}) Error: Device type {device['type']} not supported.")
+        sys.exit(1)
+
 # MAIN FUNCTION
 
 def main():
@@ -364,9 +412,13 @@ def main():
                         add, activate, commit, clean, full-install""")
     parser.add_argument("-u", "--username", type=str, help="Username of the admin user.")
     parser.add_argument("-p", "--password", type=str, help="Password of the admin user.")
-    parser.add_argument("-i", "--inventory", type=bool, help="Display the inventory.",
+    parser.add_argument("-I", "--inventorymode", type=bool, help="INVENTORY mode: enable.",
+                        action=argparse.BooleanOptionalAction)
+    parser.add_argument("-i", "--inventory", type=bool, help="Display inventory.",
                         action=argparse.BooleanOptionalAction)
     parser.add_argument("-b", "--bundle", type=bool, help="Display devices in bundle mode.",
+                        action=argparse.BooleanOptionalAction)
+    parser.add_argument("-s", "--scansoftware", type=bool, help="Display software versions.",
                         action=argparse.BooleanOptionalAction)
     parser.add_argument("-H", "--hostname", type=str, help="HOST mode: hostname.")
     parser.add_argument("-O", "--os", type=str, help="HOST mode: OS type (cisco_xe).")
@@ -378,14 +430,16 @@ def main():
     operation = args.operation
     username = args.username
     password = args.password
-    show_inventory = args.inventory
+    inventory_mode = args.inventorymode
+    inventory_display = args.inventory
     scan_for_bundle = args.bundle
+    scan_for_versions = args.scansoftware
     hostname = args.hostname
     operating_system = args.os
     software_version = args.software
     target = args.target
-    device = {hostname: {'ipaddr': target, 'type': operating_system, 'name': hostname,
-              'target-version': software_version}}
+    device = {hostname: {"ipaddr": target, "type": operating_system, "name": hostname,
+              "target-version": software_version, "upgrade": "yes"}}
 
     # Start logging.
     # If there is an old log file delete it first.
@@ -410,7 +464,7 @@ def main():
         print(termcolor.colored("Success: Entering HOST mode.", "green"))
         inventory = device
     elif (hostname is None or operating_system is None or software_version is None
-            or target is None):
+            or target is None) and inventory_mode is False:
         msg = "Error: HOST mode requires hostname, os, software and target flag - check your flags."
         print(termcolor.colored(msg, "red"))
         sys.exit(1)
@@ -429,10 +483,12 @@ def main():
         run_multithreaded(clean_disk, inventory, username, password)
     elif operation == "full-install":
         run_multithreaded(full_install_no_prompts, inventory, username, password)
-    elif operation == "info" and show_inventory is True:
+    elif operation == "info" and inventory_display is True:
         print_inventory(inventory_file_path)
     elif operation == "info" and scan_for_bundle is True:
-        run_multithreaded(find_devices_in_bundle_mode, inventory, username, password)
+        run_multithreaded(find_bundle_mode, inventory, username, password)
+    elif operation == "info" and scan_for_versions is True:
+        run_multithreaded(find_ios_version, inventory, username, password)
     elif operation == "info":
         msg = "Warning: Please choose an info switch."
         print(termcolor.colored(msg, "yellow"))
