@@ -6,13 +6,12 @@
 
 ## Scenario 1: Preparing To Upgrade
 
-## Scenario 1: Staged Install 
+## Scenario 2: Staged Install 
 as
 
-## Scenario 2: Full-Installation
+## Scenario 3: Full-Installation
 as
 
 ## To Do: 
 - Convert from BUNDLE to INSTALL
-- Discover devices that need upgrade
-- Add upgrade tag to inventory
+- Fix condition when there is nothing to clean

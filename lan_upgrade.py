@@ -282,6 +282,8 @@ def add_image_process(device, username, password):
     """
     # Check that the device has been defined as IOS-XE device in the inventory.
     # If it's not exit the function gracefully.
+    # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST
+    # mode it's assumed that the device will be updated.
     if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)     
         print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
@@ -315,10 +317,15 @@ def activate_image(device, username, password):
     Activates the new image using install activate command. The reload is auto-
     approved after activation has compeleted.
     """
+    # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST
+    # mode it's assumed that the device will be updated.
     if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Starting to activate the new image.")
         print(f"({device['name']}) Activating the new image.")
+        # Moves the target version to activate but not commited stage. The activation requires a 
+        # reload which is auto-approved by the script. Actication should be done during maintenance
+        # windows to avoid service loss. Timer set to 11 min to give time for slower switches.
         net_connect.send_command('install activate', read_timeout=660,
                                 expect_string=r"This operation may require a reload of the system. Do you want to proceed"
                                 )
@@ -340,10 +347,14 @@ def commit_image(device, username, password):
     """ 
     Commits the new image using install commit command.
     """
+    # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST
+    # mode it's assumed that the device will be updated.
     if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Starting to commit the new image.")
         print(f"({device['name']}) Commit the new image.")
+        # The last step in the staged upgrade process. After commit the new version shows as the
+        # # active committed version.
         net_connect.send_command('install commit', read_timeout=660)
         msg = f"({device['name']}) Success: Commit complete. Device upgraded."
         print(termcolor.colored(msg, "green"))
@@ -364,7 +375,9 @@ def clean_disk(device, username, password):
     space for the upgrade.
     """
     if device['type'] == 'cisco_xe':
-        net_connect = open_connection(device, username, password)   
+        net_connect = open_connection(device, username, password)
+        # Setting a generous timer to allow time for slower switches to do their thing.
+        # Auto-approve the operation with y.
         print(f"({device['name']}) Starting to clean the device from inactive images.")
         net_connect.send_command('install remove inactive', read_timeout=660,
                                 expect_string=r"Do you want to remove the above files")
@@ -383,7 +396,7 @@ def full_install_no_prompts(device, username, password):
     user. It enables a one step install for users that doesn't require a phased approach with add, 
     activate and commit commands. 
     """
-    # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST 
+    # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST
     # mode it's assumed that the device will be updated.
     if device["type"] == "cisco_xe" and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)
