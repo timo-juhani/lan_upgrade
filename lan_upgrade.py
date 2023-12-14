@@ -383,11 +383,18 @@ def full_install_no_prompts(device, username, password):
     user. It enables a one step install for users that doesn't require a phased approach with add, 
     activate and commit commands. 
     """
+    # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST 
+    # mode it's assumed that the device will be updated.
     if device["type"] == "cisco_xe" and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)
+        # Configuration must be saved unless saved already prior to upgrade.
         print(f"({device['name']}) Saving configuration.")
         net_connect.send_command('write memory', read_timeout=60)
         print(f"({device['name']}) Starting full install without prompts.")
+        # One-shot command to run thorugh the entire installation without asking any confirmation
+        # from the user. This is handy when the upgraded device doesn't require staged upgrade. An
+        # example could be lab equipment or non-critical production upgrades. The timeout is raised
+        # to 15 min in order to cater for slower switches such as Cat 9200L.
         cmd = f"install add file flash:{device['target-version']} activate commit prompt-level none"
         net_connect.send_command(cmd, read_timeout=900)
         print(f"({device['name']}) Success: Full install complete. Device rebooting.")
