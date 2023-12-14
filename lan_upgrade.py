@@ -432,16 +432,24 @@ def find_ios_version(device, username, password):
     Prints the version and if the device needs to be upgraded.
     """
     if device['type'] == 'cisco_xe':
+        # Parse the version out from filename. First remove the common suffix.
         target_version = device["target-version"].removesuffix(".SPA.bin")
+        # Then match the version using Regex and therefore get rid of the prefix of the filename.
+        # The match is the first list item.
         reg = re.compile(r"\S{1,2}.\S{1,2}.\S{1,3}$")
         target_version = reg.findall(target_version)[0]
+        # Get show version to find running version
         net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Get 'show version'.")
         output = net_connect.send_command('show version', read_timeout=60)
         net_connect.disconnect()
+        # Find the right line from command output. It starts with Cisco IOS XE Software.
         for line in output.split("\n"):
             if 'Cisco IOS XE Software' in line:
+                # Keep only the version and get rid of everything else.
                 running_version = line.split(",")[1].removeprefix(" Version ")
+                # If the running version is same as the target no upgrade required.
+                # If not inform the user that an upgrade is required.
                 if running_version == target_version:
                     msg = f"Success: Running {running_version}, Target {target_version}"
                     print(termcolor.colored(f"({device['name']}) {msg}", "green"))
@@ -456,25 +464,35 @@ def operation_logic(args, inventory, username, password, inventory_file_path):
     """
     Chooses an operation based on arguments provided by the user.
     """
+    # Add image to devices image repository
     if args.operation == "add":
         run_multithreaded(add_image_process, inventory, username, password)
+    # Activate image to devices image repository. Note: this requires a reload.
     elif args.operation == "activate":
         run_multithreaded(activate_image, inventory, username, password)
+    # Commit the image as the new running image.
     elif args.operation == "commit":
         run_multithreaded(commit_image, inventory, username, password)
+    # Remove all packages that are not currently in use. Helps to clean up the disk before upgrade.
     elif args.operation == "clean":
         run_multithreaded(clean_disk, inventory, username, password)
+    # One-shot installation that doesn't ask for permissions. Add, activate, commit, reload.
     elif args.operation == "full-install":
         run_multithreaded(full_install_no_prompts, inventory, username, password)
+    # Info switch that shows the device inventory (.csv).
     elif args.operation == "info" and args.inventory is True:
         print_inventory(inventory_file_path)
+    # Info switch that goes to device(s) to check if it's in INSTALL or BUNDLE mode.
     elif args.operation == "info" and args.bundle is True:
         run_multithreaded(find_bundle_mode, inventory, username, password)
+    # Info switch that finds the running IOS version and compares it to the target version.
     elif args.operation == "info" and args.scansoftware is True:
         run_multithreaded(find_ios_version, inventory, username, password)
+    # Info operaton requires a switch -> give a pointer to the user.
     elif args.operation == "info":
         msg = "Warning: Please choose an info switch."
         print(termcolor.colored(msg, "yellow"))
+    # For unsupported operations.
     else:
         msg = f"Error: Operation not supported: {args.operation}"
         print(termcolor.colored(msg, "red"))
@@ -492,14 +510,15 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
-    # Save variables from arguments provided by the user.
+    # Save arguments provided by the user to local variables.
     username = args.username
     password = args.password
+
+    # Create a dictionary for HOST mode.
     device = {args.hostname: {"ipaddr": args.target, "type": args.os, "name": args.hostname,
               "target-version": args.software, "upgrade": "yes"}}
 
-    # Start logging.
-    # If there is an old log file delete it first.
+    # Start logging. If there is an old log file delete it first.
     console_file = "console.log"
     if os.path.isfile(console_file):
         os.remove(console_file)
@@ -518,8 +537,8 @@ def main():
     # HOST gets a single device parameters as arguments whereas INVENTORY is just read from .csv.
     inventory = choose_mode(args, device, inventory_file_path)
 
-    # Depending on the selected positional argument run a different action
-    # using multithreading against the list of devices defined in inventory.csv.
+    # Depending on the selected positional argument run a different action using multithreading 
+    # against the list of devices defined in inventory.csv.
     operation_logic(args, inventory, username, password, inventory_file_path)
 
 # EXECUTION
