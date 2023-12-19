@@ -24,7 +24,7 @@ import termcolor
 
 def exception_handler(func):
     """
-    Decorator to catch exceptions. 
+    Decorator to catch device exceptions. 
     Returns the function or exits the program if an exception occurs.
     """
     def inner_function(device, username, password, *args, **kwargs):
@@ -40,6 +40,20 @@ def exception_handler(func):
             return sys.exit(1)
         except Exception as err:
             msg = f"({device['name']}) Error: {err}"
+            print(termcolor.colored(msg, "red"))
+            return sys.exit(1)
+    return inner_function
+
+def exception_handler_inventory(func):
+    """
+    Decorator to catch inventory file exceptions. 
+    Returns the function or exits the program if an exception occurs.
+    """
+    def inner_function(inventory_file, *args, **kwargs):
+        try:
+            return func(inventory_file, *args, **kwargs)
+        except FileNotFoundError as err:
+            msg = f"({inventory_file}) Error: Inventory file not found: {err}"
             print(termcolor.colored(msg, "red"))
             return sys.exit(1)
     return inner_function
@@ -106,17 +120,19 @@ def open_connection(device, username, password):
                                         username=username, password=password)
     return net_connect
 
-def print_inventory(inventory_file_path):
+@exception_handler_inventory
+def print_inventory(inventory_file):
     """
     Prints the contents of the inventory.csv to the console.
     """
     print("\nInventory:\n")
     # Print the content of the inventory file.
-    with open(inventory_file_path, newline='', encoding='utf-8') as csvfile:
+    with open(inventory_file, newline='', encoding='utf-8') as csvfile:
         print(pandas.read_csv(csvfile))
         print("\n")
 
-def read_inventory(inventory_file_path):
+@exception_handler_inventory
+def read_inventory(inventory_file):
     """
     Reads the inventory.csv file.
     Returns a dictionary that contains information about each device defined by
@@ -124,7 +140,7 @@ def read_inventory(inventory_file_path):
     """
     devices = {}
     # Open the inventory file for reading the devices info.
-    with open(inventory_file_path, encoding='utf-8') as inventory:
+    with open(inventory_file, encoding='utf-8') as inventory:
         # The first line in CSV is a header which needs to be skipped.
         next(inventory)
         # After the header has been skipped devices can be loaded to the dict.
@@ -137,7 +153,7 @@ def read_inventory(inventory_file_path):
             devices[device['name']] = device
     return devices
 
-def choose_mode(args, device, inventory_file_path):
+def choose_mode(args, device, inventory_file):
     """
     Based on the arguments provided (or not) the program enters in either INVENTORY or HOST mode. 
     Returns inventory as a result - either based on inventory.csv or CLI arguments for a single
@@ -154,7 +170,7 @@ def choose_mode(args, device, inventory_file_path):
         print(termcolor.colored(msg, "red"))
         return sys.exit(1)
 
-    inventory = read_inventory(inventory_file_path)
+    inventory = read_inventory(inventory_file)
     return inventory
 
 def verify_space_iosxe(device, net_connect,file):
@@ -341,7 +357,7 @@ def activate_image(device, username, password):
         net_connect = open_connection(device, username, password)
         print(f"({device['name']}) Starting to activate the new image.")
         print(f"({device['name']}) Activating the new image.")
-        # Moves the target version to activate but not commited stage. The activation requires a 
+        # Moves the target version to activate but not commited stage. The activation requires a
         # reload which is auto-approved by the script. Actication should be done during maintenance
         # windows to avoid service loss. Timer set to 11 min to give time for slower switches.
         net_connect.send_command('install activate', read_timeout=660,
@@ -504,7 +520,7 @@ def find_ios_version(device, username, password):
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
         sys.exit(1)
 
-def operation_logic(args, inventory, username, password, inventory_file_path):
+def operation_logic(args, inventory, username, password, inventory_file):
     """
     Chooses an operation based on arguments provided by the user.
     """
@@ -525,7 +541,7 @@ def operation_logic(args, inventory, username, password, inventory_file_path):
         run_multithreaded(full_install_no_prompts, inventory, username, password)
     # Info switch that shows the device inventory (.csv).
     elif args.operation == "info" and args.inventory is True:
-        print_inventory(inventory_file_path)
+        print_inventory(inventory_file)
     # Info switch that goes to device(s) to check if it's in INSTALL or BUNDLE mode.
     elif args.operation == "info" and args.bundle is True:
         run_multithreaded(find_bundle_mode, inventory, username, password)
@@ -575,15 +591,15 @@ def main():
         password = getpass.getpass(prompt ="Management password: ")
 
     # Inventory is hardcoded as inventory.csv for simplicity.
-    inventory_file_path = "inventory.csv"
+    inventory_file = "inventory.csv"
 
     # Run the program in either HOST or INVENTORY mode.
     # HOST gets a single device parameters as arguments whereas INVENTORY is just read from .csv.
-    inventory = choose_mode(args, device, inventory_file_path)
+    inventory = choose_mode(args, device, inventory_file)
 
     # Depending on the selected positional argument run a different action using multithreading 
     # against the list of devices defined in inventory.csv.
-    operation_logic(args, inventory, username, password, inventory_file_path)
+    operation_logic(args, inventory, username, password, inventory_file)
 
 # EXECUTION
 
