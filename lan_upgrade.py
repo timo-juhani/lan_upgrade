@@ -315,7 +315,7 @@ def add_image_process(device, username, password):
     # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST
     # mode it's assumed that the device will be updated.
     if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
-        net_connect = open_connection(device, username, password)     
+        net_connect = open_connection(device, username, password)
         print (f"({device['name']}) Preparing to upload image: {device['target-version']}")
         enough_space, image_exists = verify_space_iosxe(device, net_connect,
                                                         device["target-version"])
@@ -356,8 +356,9 @@ def activate_image(device, username, password):
         # Moves the target version to activate but not commited stage. The activation requires a
         # reload which is auto-approved by the script. Actication should be done during maintenance
         # windows to avoid service loss. Timer set to 11 min to give time for slower switches.
+        msg = r"This operation may require a reload of the system. Do you want to proceed"
         net_connect.send_command('install activate', read_timeout=660,
-                                expect_string=r"This operation may require a reload of the system. Do you want to proceed"
+                                expect_string=msg
                                 )
         net_connect.send_command('y')
         msg = f"({device['name']}) Success: New image activated and reload approved. Reloading!"
@@ -601,7 +602,7 @@ def main():
     # HOST gets a single device parameters as arguments whereas INVENTORY is just read from .csv.
     inventory = choose_mode(args, device, inventory_file)
 
-    # Depending on the selected positional argument run a different action using multithreading 
+    # Depending on the selected positional argument run a different action using multithreading
     # against the list of devices defined in inventory.csv.
     operation_logic(args, inventory, username, password, inventory_file)
 
