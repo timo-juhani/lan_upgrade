@@ -3,6 +3,7 @@ inventory.csv
 
 # Ignore upgrade binaries
 cat*.bin
+isr*.bin
 
 # Ignore logs
 *.log

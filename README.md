@@ -6,6 +6,12 @@
 
 ## Scenario 1: Preparing To Upgrade
 
+### Prepare Inventory
+
+### Flag Devices In Bundle Mode
+
+### Check Devices That Require Upgrade
+
 ## Scenario 2: Staged Install 
 as
 
