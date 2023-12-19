@@ -38,10 +38,6 @@ def exception_handler(func):
             msg = f"({device['name']}) Error: Device connection time out: {err}"
             print(termcolor.colored(msg, "red"))
             return sys.exit(1)
-        except Exception as err:
-            msg = f"({device['name']}) Error: {err}"
-            print(termcolor.colored(msg, "red"))
-            return sys.exit(1)
     return inner_function
 
 def exception_handler_inventory(func):
