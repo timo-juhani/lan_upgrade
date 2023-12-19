@@ -157,12 +157,12 @@ def choose_mode(args, device, inventory_file):
     """
     if (args.hostname is not None and args.os is not None and args.software is not None
         and args.target is not None):
-        print(termcolor.colored("Success: Entering HOST mode.", "green"))
+        print(termcolor.colored("(Global) Success: Entering HOST mode.", "green"))
         inventory = device
         return inventory
     if (args.hostname is None or args.os is None or args.software is None
           or args.target is None) and args.inventorymode is False:
-        msg = "Error: HOST mode requires hostname, os, software and target flag - check your flags."
+        msg = "(Global) Error: HOST mode requires hostname, os, software and target flags."
         print(termcolor.colored(msg, "red"))
         return sys.exit(1)
 
@@ -401,18 +401,26 @@ def commit_image(device, username, password):
 @exception_handler
 def clean_disk(device, username, password):
     """ 
-    Clean the device flash from inactive and unused images in order to free up
-    space for the upgrade.
+    Clean the device flash from inactive and unused images in order to free up space for the 
+    upgrade. 
     """
     if device['type'] == 'cisco_xe':
         net_connect = open_connection(device, username, password)
-        # Setting a generous timer to allow time for slower switches to do their thing.
-        # Auto-approve the operation with y.
+        # Sends the remove command to device. Setting a generous timer to allow time for slower
+        # switches to do their thing. Since the script has to cover logic remove command accepts
+        # any type of prompt as a result. After executing the remove command the script determines
+        # what to do next by checking the current prompt on the device. If the device asks for
+        # confirmation it decides that images can be removed and auto-approves the removal. In any
+        # other condition it assumes that there is nothing to clean since.
         print(f"({device['name']}) Starting to clean the device from inactive images.")
         net_connect.send_command('install remove inactive', read_timeout=660,
-                                expect_string=r"Do you want to remove the above files")
-        net_connect.send_command('y')
-        msg = f"({device['name']}) Success: Clean complete."
+                                expect_string=r"[\s\S]+")
+        current_prompt = net_connect.find_prompt()
+        if "Do you want to remove the above files" in current_prompt:
+            net_connect.send_command('y')
+            msg = f"({device['name']}) Success: Clean complete."
+        else:
+            msg = f"({device['name']}) Success: Nothing to clean."
         print(termcolor.colored(msg, "green"))
         net_connect.disconnect()
     else:
