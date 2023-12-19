@@ -14,4 +14,3 @@ as
 
 ## To Do: 
 - Convert from BUNDLE to INSTALL
-- Fix condition when there is nothing to clean
