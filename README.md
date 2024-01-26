@@ -20,3 +20,5 @@ as
 
 ## To Do: 
 - Convert from BUNDLE to INSTALL
+- Traditional upgrade
+- Logger instead of print statements
