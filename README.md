@@ -22,3 +22,4 @@ as
 - Convert from BUNDLE to INSTALL
 - Traditional upgrade
 - Logger instead of print statements
+- Add debug mode
