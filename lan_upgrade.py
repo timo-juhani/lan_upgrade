@@ -94,7 +94,6 @@ def run_multithreaded(function, inventory, username, password):
     """
     config_threads_list = []
     for hostname, device in inventory.items():
-        print(f"({device['name']}) Creating a thread.")
         # The name of the thread is the name of the device being configured.
         config_threads_list.append(threading.Thread(target=function, name=hostname, args=(device,
                                                     username, password)))
@@ -333,12 +332,12 @@ def add_image_process(device, username, password):
             verify_and_run_install_add(net_connect, device)
         net_connect.disconnect()
     elif device["upgrade"] == "no":
-        msg = f"({device['name']}) Error: Device not flagged to be upgraded (see inventory.csv)."
-        print(termcolor.colored(msg, "red"))
+        msg = f"({device['name']}) Warning: Device not flagged to be upgraded (see inventory.csv)."
+        print(termcolor.colored(msg, "yellow"))
         sys.exit(1)
     else:
-        msg = f"({device['name']}) Error: Device type {device['type']} not supported."
-        print(termcolor.colored(msg, "red"))
+        msg = f"({device['name']}) Warning: Device type {device['type']} not supported."
+        print(termcolor.colored(msg, "yellow"))
         sys.exit(1)
 
 @exception_handler
@@ -416,13 +415,37 @@ def clean_disk(device, username, password):
         print(f"({device['name']}) Starting to clean the device from inactive images.")
         net_connect.send_command('install remove inactive', read_timeout=660,
                                 expect_string=r"[\s\S]+")
-        current_prompt = net_connect.find_prompt()
-        if "Do you want to remove the above files" in current_prompt:
+
+        # The list for important Netmiko channel outputs that are the program is at look out for.
+        prompts = [
+            "[y/n]",
+            "Cleanup directory found, already in progress",
+            "Nothing to clean"
+        ]
+
+        # Scan the Netmiko channel to find one of the prompt items that are required to determine
+        # the next step in the process. Save the channel output and the previous output.
+        found_prompt = False
+        while found_prompt is False:
+            channel = net_connect.read_channel()
+            for prompt in prompts:
+                if prompt in str(channel):
+                    found_prompt = True
+            last_channel = channel
+
+        # Decision tree based on the channel outputs. Normally the program just wants to acknowledge
+        # the request to proceed. However, it turns out IOS-XE needs a bit of error handling to
+        # stabilize the program and ensure success.
+        if "Do you want to remove the above files" in last_channel:
             net_connect.send_command('y')
             msg = f"({device['name']}) Success: Clean complete."
-        else:
+            print(termcolor.colored(msg, "green"))
+        elif "Cleanup directory found, already in progress" in channel:
+            msg = f"({device['name']}) Error: Clean already in progress. Please wait and try again."
+            print(termcolor.colored(msg, "red"))
+        elif "Nothing to clean" in channel:
             msg = f"({device['name']}) Success: Nothing to clean."
-        print(termcolor.colored(msg, "green"))
+            print(termcolor.colored(msg, "green"))
         net_connect.disconnect()
     else:
         print (f"({device['name']}) Error: Device type {device['type']} not supported.")
