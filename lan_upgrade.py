@@ -20,9 +20,12 @@ import pyfiglet
 import pandas
 import termcolor
 
-# FUNCTION DEFINITIONS
+# CLASS DEFINITIONS
 
 class CustomFormatter(logging.Formatter):
+    """
+    Formatter class for setting the message formats and colors used by the logger. 
+    """
     grey = '\x1b[38;21m'
     blue = '\x1b[38;5;39m'
     yellow = '\x1b[38;5;226m'
@@ -44,6 +47,8 @@ class CustomFormatter(logging.Formatter):
         formatter = logging.Formatter(log_fmt)
         return formatter.format(record)
 
+# FUNCTION DEFINITIONS
+    
 def exception_handler(func):
     """
     Decorator to catch device exceptions. 
@@ -90,6 +95,9 @@ def create_parser():
                         action="store_true")
     parser.add_argument("-s", "--scansoftware", help="Display software versions.",
                         action="store_true")
+    parser.add_argument("-c", "--convert", help="Covert from BUNDLE to INSTALL mode", 
+                        action="store_true")
+    parser.add_argument("-d", "--debug", help="Run in debug mode", action="store_true")
     parser.add_argument("-H", "--hostname", type=str, help="HOST mode: hostname.")
     parser.add_argument("-O", "--os", type=str, help="HOST mode: OS type (cisco_xe).")
     parser.add_argument("-S", "--software", type=str, help="HOST mode: Software image (*.bin).")
@@ -185,11 +193,26 @@ def choose_mode(args, device, inventory_file):
     inventory = read_inventory(inventory_file)
     return inventory
 
-def verify_space_iosxe(device, net_connect,file):
+def check_image_exists(device, net_connect,file):
+    """
+    Check whether the target .bin exists on the device already.
+    Return boolean True if it's already there on flash and False if not. 
+    """
+    logging.info("%s - Checking if image exists already.", device["name"])
+    # Check what files are on the disk.
+    result = net_connect.send_command("show flash:")
+    # Using Regex parse if the software binary is already on the disk.
+    reg = re.compile(fr"{file}")
+    exist = reg.findall(result)
+    if exist:
+        return True
+    else:
+        return False
+
+def check_flash_space(device, net_connect,file):
     """
     Check that there is enough space on the bootflash for the new image.
-    Returns two booleans that provide information whether there is enough disk 
-    space and whether the target .bin exists on the device already.
+    Returns True if it fits or False if there isn't enough space.
     """
     logging.info("%s - Checking disk space.", device["name"])
     # Check what files are on the disk.
@@ -197,19 +220,11 @@ def verify_space_iosxe(device, net_connect,file):
     # Using Regex parse how many bytes are free.
     reg = re.compile(r'(\d+)\sbytes\savailable')
     space = int(reg.findall(result)[0])
-    # Using Regex parse if the software binary is already on the disk.
-    reg = re.compile(fr"{file}")
-    exist = reg.findall(result)
     f_size = os.path.getsize(file)
     if space >= f_size:
-        enough_space = 'True'
+        return True
     if space < f_size:
-        enough_space = 'False'
-    if exist:
-        image_exists = 'True'
-    else:
-        image_exists = 'False'
-    return enough_space,image_exists
+        return False
 
 def check_md5(file):
     """
@@ -296,6 +311,7 @@ def verify_and_run_install_add(net_connect, device):
         install_add(net_connect,device)
     else:
         logging.error("%s - Aborting the upgrade.", device["name"])
+        sys.exit(1)
 
 @exception_handler
 def add_image_process(device, username, password):
@@ -328,19 +344,24 @@ def add_image_process(device, username, password):
     # mode it's assumed that the device will be updated.
     if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
         net_connect = open_connection(device, username, password)
-        logging.info("%s - Preparing to upload image: %s", device["name"], device["target-version"])
-        enough_space, image_exists = verify_space_iosxe(device, net_connect,
-                                                        device["target-version"])
-        if enough_space == 'True' and image_exists == 'False':
-            logging.info("%s - Device has space and image doesn't exist", device["name"])
-            enable_scp(net_connect, device)
-            copy_upgrade_image(net_connect, device)
-            verify_and_run_install_add(net_connect, device)
-        elif enough_space == 'False':
-            logging.error("%s - Not enough space. Try 'install remove inactive.'", device["name"])
-        elif image_exists == 'True':
+        image_exists = check_image_exists(device, net_connect, device["target-version"])
+
+        if image_exists is True:
             logging.info("%s - Target image exists.", device["name"])
             verify_and_run_install_add(net_connect, device)
+
+        elif image_exists is False:
+            logging.info("%s - Target image doesn't exist.", device["name"])
+            logging.info("%s - Checking if there is enough space for image upload.", device["name"])
+            enough_space = check_flash_space(device, net_connect, device["taret-version"])
+
+            if enough_space is True:
+                logging.info("%s - Device has enough space for the image.", device["name"])
+                enable_scp(net_connect, device)
+                copy_upgrade_image(net_connect, device)
+                verify_and_run_install_add(net_connect, device)
+            elif enough_space is False:
+                logging.error("%s - Not enough space. Try 'install remove inactive.'", device["name"])
         net_connect.disconnect()
     elif device["upgrade"] == "no":
         logging.warning("%s - Not flagged to be upgraded (see inventory.csv).", device["name"])
@@ -473,7 +494,7 @@ def full_install_no_prompts(device, username, password):
         # to 15 min in order to cater for slower switches such as Cat 9200L.
         cmd = f"install add file flash:{device['target-version']} activate commit prompt-level none"
         net_connect.send_command(cmd, read_timeout=900)
-        logging.info("%s - Full install complete. Device rebooting.")
+        logging.info("%s - Full install complete. Device rebooting.", device["name"])
         net_connect.disconnect()
     elif device["upgrade"] == "no":
         logging.warning("%s - Not flagged to be upgraded (see inventory.csv).", device["name"])
@@ -502,11 +523,14 @@ def find_bundle_mode(device, username, password):
         if "BUNDLE" in output:
             logging.warning("%s - Runs in BUNDLE mode. Convert to INSTALL before upgrade.",
                             device["name"])
+            return True
         elif "INSTALL" in output:
             logging.info("%s - Runs in INSTALL mode.", device["name"])
+            return False
         else:
             logging.error("%s - Can't determine whether runs in INSTALL or BUNDLE mode." +
                           " Manual check required.")
+            return False
     else:
         logging.error("%s - Device type %s not supported.", device['name'], device['type'])
         sys.exit(1)
@@ -522,7 +546,7 @@ def find_ios_version(device, username, password):
         target_version = device["target-version"].removesuffix(".SPA.bin")
         # Then match the version using Regex and therefore get rid of the prefix of the filename.
         # The match is the first list item.
-        reg = re.compile(r"\S{1,2}.\S{1,2}.\S{1,3}$")
+        reg = re.compile(r"\S{1,2}[.]\S{1,2}[.]\S{1,3}$")
         target_version = reg.findall(target_version)[0]
         # Get show version to find running version
         net_connect = open_connection(device, username, password)
@@ -539,11 +563,73 @@ def find_ios_version(device, username, password):
                 if running_version == target_version:
                     logging.info("%s - Running %s, Target %s -> OK!", device["name"],
                                  running_version, target_version)
+                    return True
                 else:
                     logging.warning("%s - Running %s, Target %s -> UPGRADE!", device["name"],
                                     running_version, target_version)
+                    return False
     else:
         logging.error("%s - Device type %s not supported.", device['name'], device['type'])
+        sys.exit(1)
+
+@exception_handler
+def convert_from_bundle_to_install(device, username, password):
+    """
+    Converts the device from bundle mode to install mode. 
+    """
+    # jos bundle moodissa
+        # jos packages.conf on olemassa ja vastaa nykyistä IOS versiota
+            # dir flash:packages.conf > packages.conf stdoutissa
+            # no boot system
+            # boot system flash:packages.conf
+            # wr
+            # reload
+        # muuten
+            # dir flash:packages.conf > No such file
+            # no boot system
+            # boot system flash:packages.conf
+            # wr
+            # install add funktio
+    # muuten älä tee mitään
+
+    in_bundle_mode = find_bundle_mode(device, username, password)
+    current_image_is_target = find_ios_version(device, username, password)
+    if in_bundle_mode is True and current_image_is_target is True:
+        # If the device is in bundle mode and current image is the same as target image (which is a
+        # requirement for conversion). 
+        logging.info("%s - Starting the conversion process.", device["name"])
+        net_connect = open_connection(device, username, password)
+        logging.info("%s - Finding if packages.conf exists on flash.", device["name"])
+        output = net_connect.send_command('dir flash:packages.conf', read_timeout=60)
+        # If packages.conf is not around: point the boot system to packages.conf and expand the .bin
+        # file with one-shot install command. This reboots the device in INSTALL mode with the same
+        # version as it was running with. 
+        if "Error opening flash:/packages.conf (No such file or directory)" in output:
+            logging.info("%s - packages.conf doesn't exist on flash.", device["name"])
+            commands = ["no boot system",
+                        "boot system flash:packages.conf"]
+            logging.info("%s - Removing the old boot system configuration.", device["name"])
+            logging.info("%s - Setting the boot variable to flash:packages.conf", device["name"])
+            net_connect.send_config_set(commands)
+            logging.info("%s - Saving configuration.", device["name"])
+            net_connect.send_command("write memory")
+            logging.info("%s - Running one-shot install command.", device["name"])
+            full_install_no_prompts(device, username, password)
+        # Else it's safe to assume that .bin has been already expanded on flash and the only thing
+        # left to do is to just point the boot system to packages.conf and reboot the device.
+        else:
+            ###
+            ####
+            # CONTINUE
+            #####
+            ######
+            pass
+        net_connect.disconnect()
+    elif current_image_is_target is False:
+        logging.error("%s - Target must be the current version to convert.", device["name"])
+        sys.exit(1)
+    else:
+        logging.error("%s - Doesn't run in BUNDLE mode. No actions required.", device["name"])
         sys.exit(1)
 
 def operation_logic(args, inventory, username, password, inventory_file):
@@ -565,6 +651,9 @@ def operation_logic(args, inventory, username, password, inventory_file):
     # One-shot installation that doesn't ask for permissions. Add, activate, commit, reload.
     elif args.operation == "full-install":
         run_multithreaded(full_install_no_prompts, inventory, username, password)
+    # Conversion from BUNDLE mode to INSTALL mode.
+    elif args.operation == "convert":
+        run_multithreaded(convert_from_bundle_to_install, inventory, username, password)
     # Info switch that shows the device inventory (.csv).
     elif args.operation == "info" and args.inventory is True:
         print_inventory(inventory_file)
@@ -588,30 +677,42 @@ def main():
     Executes the main program. 
     """
 
-    # Start logging. If there is an old log file delete it first.
-    log_file = "application.log"
-    if os.path.isfile(log_file):
-        os.remove(log_file)
-
-    file_handler = logging.FileHandler(filename=log_file)
-    stdout_handler = logging.StreamHandler(stream=sys.stdout)
-    stdout_handler.setFormatter(CustomFormatter())
-    handlers = [file_handler, stdout_handler]
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format='[%(asctime)s] %(levelname)s - %(message)s',
-        handlers=handlers
-    )
-    logging.getLogger("application")
-
-
     # Print the welcome banner.
     create_banner()
 
     # Create the command parser.
     parser = create_parser()
     args = parser.parse_args()
+
+    # Start logging. If there is an old log file delete it first.
+    log_file = "application.log"
+    if os.path.isfile(log_file):
+        os.remove(log_file)
+
+    # Logging saves and shows the same content to a log file and stdout, respectively.
+    # The program can be run in debug mode which the user selects using an CLI argument "debug".
+    # Upon selection the argument is marked as True by the program and the logic below increases 
+    # the global logging accuracy all the way to DEBUG messages. If not selected the program follows
+    # the default behavior of showing only INFO and above messages. 
+    file_handler = logging.FileHandler(filename=log_file)
+    stdout_handler = logging.StreamHandler(stream=sys.stdout)
+    stdout_handler.setFormatter(CustomFormatter())
+    handlers = [file_handler, stdout_handler]
+
+    if args.debug is True:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='[%(asctime)s] %(levelname)s - %(message)s',
+            handlers=handlers
+        )
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='[%(asctime)s] %(levelname)s - %(message)s',
+            handlers=handlers
+        )
+
+    logging.getLogger("application")
 
     # Save arguments provided by the user to local variables.
     username = args.username
