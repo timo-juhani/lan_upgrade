@@ -576,7 +576,7 @@ def operation_logic(args, inventory, username, password, inventory_file):
         run_multithreaded(find_ios_version, inventory, username, password)
     # Info operaton requires a switch -> give a pointer to the user.
     elif args.operation == "info":
-        logging.warning("Warning: Please choose an info switch.")
+        logging.warning("Please choose an info switch.")
     # For unsupported operations.
     else:
         logging.error("Operation not supported: %s", args.operation)
