@@ -70,19 +70,38 @@ Not yet developed
 ### Check Devices in Bundle Mode
 
 ```
+./lan_upgrade.py -I info -b
 ```
 
 ### Check Devices That Require Upgrade
 
+```
+./lan_upgrade.py -I info -s
+```
+
 ## Upgrade
 
 ### Staged Install 
-as
+
+```
+./lan_upgrade.py -I add
+
+./lan_upgrade.py -I activate
+
+./lan_upgrade.py -I commit
+```
 
 ### Full-Installation
-as
+
+```
+./lan_upgrade.py -I full-install
+```
 
 ## Troubleshooting
+
+```
+./lan_upgrade.py -I info -s -d
+```
 
 ## To Do: 
 - Check control (SSH) connections
