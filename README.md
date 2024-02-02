@@ -105,6 +105,5 @@ Not yet developed
 
 ## To Do: 
 - Check control (SSH) connections
-- What if there is no inventory file
 - What if there is nothing to activate
 - What if there is nothing to commit
