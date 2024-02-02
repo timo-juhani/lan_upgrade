@@ -3,12 +3,12 @@
 ## Introduction
 
 How many times you work with networks that are outright insecure, vulnerable and unpatched? 
-How often do you hear any of these:
-a) We don't have time to upgrade.
-b) We don't have an SDN or a programmable API to do this.
-c) We got hacked because of a known software vulnerability.
-d) We just had a major incident becasue the software base is so old.
-e) We didn't know networks need to be patched. 
+How often do you hear any of these:\
+a) We don't have time to upgrade.\
+b) We don't have an SDN or a programmable API to do this.\
+c) We got hacked because of a known software vulnerability.\
+d) We just had a major incident becasue the software base is so old.\
+e) We didn't know networks need to be patched. \
 
 In reality most organizations have massive LAN networks. Therefore all points from a) to e) lead to 
 a massive maintenance debt because they can't keep up with the patching requirements.
