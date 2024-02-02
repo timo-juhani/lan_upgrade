@@ -116,7 +116,7 @@ def create_banner():
     banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
     warning = "Warning: Device upgrade is a disruptive operation!"
     print("\n")
-    print(termcolor.colored(banner, "light_cyan"))
+    print(termcolor.colored(banner, "magenta", attrs=["bold"]))
     print("\n")
     print(termcolor.colored(warning, "yellow"))
     print("\n")
