@@ -224,5 +224,4 @@ But there could be times when you want to have the full debug capability enabled
 ```
 
 ## To Do
-- Check control (SSH) connections
 - What if there is nothing to activate

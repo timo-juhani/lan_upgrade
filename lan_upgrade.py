@@ -100,6 +100,8 @@ def create_parser():
                         action="store_true")
     parser.add_argument("-s", "--scansoftware", help="Display software versions.",
                         action="store_true")
+    parser.add_argument("-r", "--reachability", help="Check for control connections.",
+                        action="store_true")
     parser.add_argument("-c", "--convert", help="Convert from BUNDLE to INSTALL mode",
                         action="store_true")
     parser.add_argument("-d", "--debug", help="Run in debug mode", action="store_true")
@@ -149,6 +151,32 @@ def open_connection(device, username, password):
     net_connect = netmiko.ConnectHandler(device_type=device['type'], ip=device['ipaddr'],
                                         username=username, password=password)
     return net_connect
+
+@exception_handler
+def check_control_connection(device, username, password):
+    """
+    Checks the reachability to the device(s).
+    """
+    logging.info("%s - Checking control connection.", device["name"])
+    logging.info("%s - Pinging the device.", device["name"])
+
+    # Run a simple OS command to ping the device once. Send the stdout to bin. 
+    ping_response = os.system(f"ping -c 1 {device['ipaddr']} > /dev/null 2>&1")
+
+    # If the response is null the device responded. Else the ping test failed and the program stops.
+    if ping_response == 0:
+        logging.info("%s - Responds to ping.", device["name"])
+    else:
+        logging.error("%s - Doesn't respond to ping.", device["name"])
+        sys.exit(1)
+
+    # After ping test has succeeded try to open an SSH connection to the target device.
+    # If exception_handler doesn't capture an error notify the user that the control connections is
+    # ok.
+    logging.info("%s - Opening a control connection with SSH.", device["name"])
+    net_connect = open_connection(device, username, password)
+    net_connect.disconnect()
+    logging.info("%s - Control connection OK!", device["name"])
 
 @exception_handler_inventory
 def print_inventory(inventory_file):
@@ -676,6 +704,10 @@ def operation_logic(args, inventory, username, password, inventory_file):
     # Info switch that finds the running IOS version and compares it to the target version.
     elif args.operation == "info" and args.scansoftware is True:
         run_multithreaded(find_ios_version, inventory, username, password)
+
+    # Info switch that checks the condition of control connection to device(s)
+    elif args.operation == "info" and args.reachability is True:
+        run_multithreaded(check_control_connection, inventory, username, password)
 
     # Info operaton requires a switch -> give a pointer to the user.
     elif args.operation == "info":
