@@ -91,7 +91,11 @@ a decision that the device is good to be upgraded if you run anything but info o
 
 ### Check Control Connections
 
-Not yet developed
+Before anything make sure the device(s) is reachable by pinging it and SSH'ing into it. 
+
+```
+./lan_upgrade.py -I info -r
+```
 
 ### Check Devices in Bundle Mode
 
