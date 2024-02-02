@@ -223,6 +223,6 @@ But there could be times when you want to have the full debug capability enabled
 ./lan_upgrade.py -I info -s -d
 ```
 
-## To Do: 
+## To Do
 - Check control (SSH) connections
 - What if there is nothing to activate
