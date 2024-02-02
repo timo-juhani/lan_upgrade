@@ -15,10 +15,12 @@ import threading
 import getpass
 import logging
 import argparse
+import socket
 import netmiko
 import pyfiglet
 import pandas
 import termcolor
+
 
 # CLASS DEFINITIONS
 
@@ -48,7 +50,7 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 # FUNCTION DEFINITIONS
-    
+
 def exception_handler(func):
     """
     Decorator to catch device exceptions. 
@@ -62,6 +64,9 @@ def exception_handler(func):
             return sys.exit(1)
         except netmiko.exceptions.NetmikoTimeoutException as err:
             logging.error("%s - Connection timeout. - %s", device["name"], err)
+            return sys.exit(1)
+        except socket.error as err:
+            logging.error("%s - Connection was dropped. - %s", device["name"], err)
             return sys.exit(1)
     return inner_function
 
@@ -95,7 +100,7 @@ def create_parser():
                         action="store_true")
     parser.add_argument("-s", "--scansoftware", help="Display software versions.",
                         action="store_true")
-    parser.add_argument("-c", "--convert", help="Covert from BUNDLE to INSTALL mode", 
+    parser.add_argument("-c", "--convert", help="Convert from BUNDLE to INSTALL mode",
                         action="store_true")
     parser.add_argument("-d", "--debug", help="Run in debug mode", action="store_true")
     parser.add_argument("-H", "--hostname", type=str, help="HOST mode: hostname.")
@@ -109,8 +114,12 @@ def create_banner():
     Create a banner to show when program is executed.
     """
     banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
+    warning = "Warning: Device upgrade is a disruptive operation!"
     print("\n")
-    print(termcolor.colored(banner, "cyan"))
+    print(termcolor.colored(banner, "light_cyan"))
+    print("\n")
+    print(termcolor.colored(warning, "yellow"))
+    print("\n")
 
 def run_multithreaded(function, inventory, username, password):
     """
@@ -314,6 +323,43 @@ def verify_and_run_install_add(net_connect, device):
         sys.exit(1)
 
 @exception_handler
+def find_ios_version(device, username, password):
+    """
+    Scans the device(s) for IOS version.
+    Prints the version and if the device needs to be upgraded.
+    """
+    if device['type'] == 'cisco_xe':
+        # Parse the version out from filename. First remove the common suffix.
+        target_version = device["target-version"].removesuffix(".SPA.bin")
+        # Then match the version using Regex and therefore get rid of the prefix of the filename.
+        # The match is the first list item.
+        reg = re.compile(r"\S{1,2}[.]\S{1,2}[.]\S{1,3}$")
+        target_version = reg.findall(target_version)[0]
+        # Get show version to find running version
+        net_connect = open_connection(device, username, password)
+        logging.info("%s - Get 'show version'", device["name"])
+        output = net_connect.send_command('show version', read_timeout=60)
+        net_connect.disconnect()
+        # Find the right line from command output. It starts with Cisco IOS XE Software.
+        for line in output.split("\n"):
+            if 'Cisco IOS XE Software' in line:
+                # Keep only the version and get rid of everything else.
+                running_version = line.split(",")[1].removeprefix(" Version ")
+                # If the running version is same as the target no upgrade required.
+                # If not inform the user that an upgrade is required.
+                if running_version == target_version:
+                    logging.info("%s - Running %s, Target %s -> OK!", device["name"],
+                                 running_version, target_version)
+                    return True
+                else:
+                    logging.warning("%s - Running %s, Target %s -> UPGRADE!", device["name"],
+                                    running_version, target_version)
+                    return False
+    else:
+        logging.error("%s - Device type %s not supported.", device['name'], device['type'])
+        sys.exit(1)
+
+@exception_handler
 def add_image_process(device, username, password):
     """
     Adds the image to the device's image repository after running space and 
@@ -342,7 +388,10 @@ def add_image_process(device, username, password):
     # If it's not exit the function gracefully.
     # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST
     # mode it's assumed that the device will be updated.
-    if device['type'] == 'cisco_xe' and device["upgrade"] == "yes":
+
+    no_upgrade_needed = find_ios_version(device, username, password)
+
+    if device["type"] == "cisco_xe" and device["upgrade"] == "yes" and no_upgrade_needed is False:
         net_connect = open_connection(device, username, password)
         image_exists = check_image_exists(device, net_connect, device["target-version"])
 
@@ -353,7 +402,7 @@ def add_image_process(device, username, password):
         elif image_exists is False:
             logging.info("%s - Target image doesn't exist.", device["name"])
             logging.info("%s - Checking if there is enough space for image upload.", device["name"])
-            enough_space = check_flash_space(device, net_connect, device["taret-version"])
+            enough_space = check_flash_space(device, net_connect, device["target-version"])
 
             if enough_space is True:
                 logging.info("%s - Device has enough space for the image.", device["name"])
@@ -361,10 +410,15 @@ def add_image_process(device, username, password):
                 copy_upgrade_image(net_connect, device)
                 verify_and_run_install_add(net_connect, device)
             elif enough_space is False:
-                logging.error("%s - Not enough space. Try 'install remove inactive.'", device["name"])
+                logging.error("%s - Not enough space. Try 'install remove inactive.'",
+                              device["name"])
         net_connect.disconnect()
-    elif device["upgrade"] == "no":
-        logging.warning("%s - Not flagged to be upgraded (see inventory.csv).", device["name"])
+    elif device["upgrade"] == "no" and no_upgrade_needed is False:
+        logging.warning("%s - Needs upgrade but not flagged to be upgraded (see inventory.csv).",
+                        device["name"])
+        sys.exit(1)
+    elif no_upgrade_needed is True:
+        logging.info("%s - No need to upgrade. Already in target version.", device["name"])
         sys.exit(1)
     else:
         logging.error("%s - Device type %s not supported.", device['name'], device['type'])
@@ -536,74 +590,23 @@ def find_bundle_mode(device, username, password):
         sys.exit(1)
 
 @exception_handler
-def find_ios_version(device, username, password):
-    """
-    Scans the device(s) for IOS version.
-    Prints the version and if the device needs to be upgraded.
-    """
-    if device['type'] == 'cisco_xe':
-        # Parse the version out from filename. First remove the common suffix.
-        target_version = device["target-version"].removesuffix(".SPA.bin")
-        # Then match the version using Regex and therefore get rid of the prefix of the filename.
-        # The match is the first list item.
-        reg = re.compile(r"\S{1,2}[.]\S{1,2}[.]\S{1,3}$")
-        target_version = reg.findall(target_version)[0]
-        # Get show version to find running version
-        net_connect = open_connection(device, username, password)
-        logging.info("%s - Get 'show version'", device["name"])
-        output = net_connect.send_command('show version', read_timeout=60)
-        net_connect.disconnect()
-        # Find the right line from command output. It starts with Cisco IOS XE Software.
-        for line in output.split("\n"):
-            if 'Cisco IOS XE Software' in line:
-                # Keep only the version and get rid of everything else.
-                running_version = line.split(",")[1].removeprefix(" Version ")
-                # If the running version is same as the target no upgrade required.
-                # If not inform the user that an upgrade is required.
-                if running_version == target_version:
-                    logging.info("%s - Running %s, Target %s -> OK!", device["name"],
-                                 running_version, target_version)
-                    return True
-                else:
-                    logging.warning("%s - Running %s, Target %s -> UPGRADE!", device["name"],
-                                    running_version, target_version)
-                    return False
-    else:
-        logging.error("%s - Device type %s not supported.", device['name'], device['type'])
-        sys.exit(1)
-
-@exception_handler
 def convert_from_bundle_to_install(device, username, password):
     """
     Converts the device from bundle mode to install mode. 
     """
-    # jos bundle moodissa
-        # jos packages.conf on olemassa ja vastaa nykyistä IOS versiota
-            # dir flash:packages.conf > packages.conf stdoutissa
-            # no boot system
-            # boot system flash:packages.conf
-            # wr
-            # reload
-        # muuten
-            # dir flash:packages.conf > No such file
-            # no boot system
-            # boot system flash:packages.conf
-            # wr
-            # install add funktio
-    # muuten älä tee mitään
-
     in_bundle_mode = find_bundle_mode(device, username, password)
     current_image_is_target = find_ios_version(device, username, password)
     if in_bundle_mode is True and current_image_is_target is True:
         # If the device is in bundle mode and current image is the same as target image (which is a
-        # requirement for conversion). 
+        # requirement for conversion).
         logging.info("%s - Starting the conversion process.", device["name"])
         net_connect = open_connection(device, username, password)
         logging.info("%s - Finding if packages.conf exists on flash.", device["name"])
         output = net_connect.send_command('dir flash:packages.conf', read_timeout=60)
+
         # If packages.conf is not around: point the boot system to packages.conf and expand the .bin
         # file with one-shot install command. This reboots the device in INSTALL mode with the same
-        # version as it was running with. 
+        # version as it was running with.
         if "Error opening flash:/packages.conf (No such file or directory)" in output:
             logging.info("%s - packages.conf doesn't exist on flash.", device["name"])
             commands = ["no boot system",
@@ -615,15 +618,21 @@ def convert_from_bundle_to_install(device, username, password):
             net_connect.send_command("write memory")
             logging.info("%s - Running one-shot install command.", device["name"])
             full_install_no_prompts(device, username, password)
+
         # Else it's safe to assume that .bin has been already expanded on flash and the only thing
         # left to do is to just point the boot system to packages.conf and reboot the device.
         else:
-            ###
-            ####
-            # CONTINUE
-            #####
-            ######
-            pass
+            logging.info("%s - packages.conf exists on flash.", device["name"])
+            commands = ["no boot system",
+                        "boot system flash:packages.conf"]
+            logging.info("%s - Removing the old boot system configuration.", device["name"])
+            logging.info("%s - Setting the boot variable to flash:packages.conf", device["name"])
+            net_connect.send_config_set(commands)
+            logging.info("%s - Saving configuration.", device["name"])
+            net_connect.send_command("write memory")
+            logging.info("%s - Rebooting the device.", device["name"])
+            net_connect.send_command("reload", expect_string="confirm")
+            net_connect.send_command("\n")
         net_connect.disconnect()
     elif current_image_is_target is False:
         logging.error("%s - Target must be the current version to convert.", device["name"])
