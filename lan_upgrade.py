@@ -86,7 +86,7 @@ def exception_handler_inventory(func):
 def create_parser():
     """
     Create a parser that the user can use to provide program arguments.
-    Returns the parser
+    Returns the parser.
     """
     parser = argparse.ArgumentParser(description="Shell application for running upgrades.")
     parser.add_argument("operation", type=str, help= """Choose the operation to be performed: info,
@@ -111,7 +111,7 @@ def create_parser():
 
 def create_banner():
     """
-    Create a banner to show when program is executed.
+    Create a banner to show when the program is executed.
     """
     banner = pyfiglet.figlet_format("LAN Upgrade", font="slant")
     warning = "Warning: Device upgrade is a disruptive operation!"
@@ -124,8 +124,8 @@ def create_banner():
 def run_multithreaded(function, inventory, username, password):
     """
     Use multithreading for updating multiple devicese simultaneously instead
-    of in sequence. Ideally this should save a significant amount of time when
-    the network is large.
+    of in sequence. Ideally this should save a significant amount of time even when the network 
+    consists of some devices.
     """
     config_threads_list = []
     for hostname, device in inventory.items():
@@ -189,11 +189,14 @@ def choose_mode(args, device, inventory_file):
     Returns inventory as a result - either based on inventory.csv or CLI arguments for a single
     host. 
     """
+    # The program enters HOST mode only if all CLI arguments have been provided by the user.
     if (args.hostname is not None and args.os is not None and args.software is not None
         and args.target is not None):
         logging.info("Entering HOST mode.")
         inventory = device
         return inventory
+    # Even if one of the CLI arguments is missing the execution stops there and the user will be
+    # notified.
     if (args.hostname is None or args.os is None or args.software is None
           or args.target is None) and args.inventorymode is False:
         logging.error("HOST mode requires hostname, os, software and target flags.")
@@ -229,9 +232,12 @@ def check_flash_space(device, net_connect,file):
     # Using Regex parse how many bytes are free.
     reg = re.compile(r'(\d+)\sbytes\savailable')
     space = int(reg.findall(result)[0])
+    # Then calculate the local file's size. The one that is on this project's root folder.
     f_size = os.path.getsize(file)
+    # If there is more space than the size of the file the function returns true.
     if space >= f_size:
         return True
+    # If less space that the size of the file return false.
     if space < f_size:
         return False
 
@@ -362,49 +368,33 @@ def find_ios_version(device, username, password):
 @exception_handler
 def add_image_process(device, username, password):
     """
-    Adds the image to the device's image repository after running space and 
-    image existence checks, copying the image to the device and verifying that 
-    the MD5 checksum matches with the expected.
+    Adds the image to the device's image repository.
     """
-    # Adding an image is a process like it or not. First you have to check if there is enough space
-    # on the disk to even attempt it. But also it makes sense to check if the target image already
-    # exists on the device. This way time will be saved for moving images around is a time taking
-    # task.
-    #
-    # The first scenario covers a situation when there is enough space but the image is not yet on
-    # flash. In this case the program ensure that SCP is enabled and SSH timeout are generous to
-    # improve probability of success. After that SCP upload is used to move the image to the device.
-    # Then after verifying the MD5 hash the image will be added to the image repository.
-    #
-    # The second scenario covers another situation in which there is not enough space on flash. The
-    # program stops execution for that device and asks to clean up some space.
-    #
-    # The third scenario covers one more situation in which the image is already on the device. In
-    # that case the program proceeds as in first scenario but skips moving around the image with
-    # SCP.
-    #
-    # All this said everything begins from a logic check:
-    # Check that the device has been defined as IOS-XE device in the inventory.
-    # If it's not exit the function gracefully.
-    # Upgrade only devices that are flagged for upgrade in inventory.csv (INVENTORY mode). In HOST
-    # mode it's assumed that the device will be updated.
 
+    # Check if the upgrade is needed in the first place.
     no_upgrade_needed = find_ios_version(device, username, password)
 
+    # If it's needed and desired go forward.
     if device["type"] == "cisco_xe" and device["upgrade"] == "yes" and no_upgrade_needed is False:
         net_connect = open_connection(device, username, password)
+
+        # Check if the image exists already.
         image_exists = check_image_exists(device, net_connect, device["target-version"])
 
+        # If the image exists we can skip the file transfer and just verify and install the image.
         if image_exists is True:
             logging.info("%s - Target image exists.", device["name"])
             verify_and_run_install_add(net_connect, device)
 
+        # If the image doesn't exists transfer it to the target if there is enough space for it.
         elif image_exists is False:
             logging.info("%s - Target image doesn't exist.", device["name"])
             logging.info("%s - Checking if there is enough space for image upload.", device["name"])
             enough_space = check_flash_space(device, net_connect, device["target-version"])
 
             if enough_space is True:
+                # If there is enough disk space the target image can be safely moved to the device
+                # for installation.
                 logging.info("%s - Device has enough space for the image.", device["name"])
                 enable_scp(net_connect, device)
                 copy_upgrade_image(net_connect, device)
@@ -413,13 +403,19 @@ def add_image_process(device, username, password):
                 logging.error("%s - Not enough space. Try 'install remove inactive.'",
                               device["name"])
         net_connect.disconnect()
+
+    # If the upgrade is needed but the device is not flagged for upgrade notify the user and exit.
     elif device["upgrade"] == "no" and no_upgrade_needed is False:
         logging.warning("%s - Needs upgrade but not flagged to be upgraded (see inventory.csv).",
                         device["name"])
         sys.exit(1)
+
+    # If upgrade is not needed notify the user and exit.
     elif no_upgrade_needed is True:
         logging.info("%s - No need to upgrade. Already in target version.", device["name"])
         sys.exit(1)
+
+    # In case the inventory contains unsupported device types notify the user and exit.
     else:
         logging.error("%s - Device type %s not supported.", device['name'], device['type'])
         sys.exit(1)
@@ -648,33 +644,43 @@ def operation_logic(args, inventory, username, password, inventory_file):
     # Add image to devices image repository
     if args.operation == "add":
         run_multithreaded(add_image_process, inventory, username, password)
+
     # Activate image to devices image repository. Note: this requires a reload.
     elif args.operation == "activate":
         run_multithreaded(activate_image, inventory, username, password)
+
     # Commit the image as the new running image.
     elif args.operation == "commit":
         run_multithreaded(commit_image, inventory, username, password)
+
     # Remove all packages that are not currently in use. Helps to clean up the disk before upgrade.
     elif args.operation == "clean":
         run_multithreaded(clean_disk, inventory, username, password)
+
     # One-shot installation that doesn't ask for permissions. Add, activate, commit, reload.
     elif args.operation == "full-install":
         run_multithreaded(full_install_no_prompts, inventory, username, password)
+
     # Conversion from BUNDLE mode to INSTALL mode.
     elif args.operation == "convert":
         run_multithreaded(convert_from_bundle_to_install, inventory, username, password)
+
     # Info switch that shows the device inventory (.csv).
     elif args.operation == "info" and args.inventory is True:
         print_inventory(inventory_file)
+
     # Info switch that goes to device(s) to check if it's in INSTALL or BUNDLE mode.
     elif args.operation == "info" and args.bundle is True:
         run_multithreaded(find_bundle_mode, inventory, username, password)
+
     # Info switch that finds the running IOS version and compares it to the target version.
     elif args.operation == "info" and args.scansoftware is True:
         run_multithreaded(find_ios_version, inventory, username, password)
+
     # Info operaton requires a switch -> give a pointer to the user.
     elif args.operation == "info":
         logging.warning("Please choose an info switch.")
+
     # For unsupported operations.
     else:
         logging.error("Operation not supported: %s", args.operation)
@@ -700,9 +706,9 @@ def main():
 
     # Logging saves and shows the same content to a log file and stdout, respectively.
     # The program can be run in debug mode which the user selects using an CLI argument "debug".
-    # Upon selection the argument is marked as True by the program and the logic below increases 
+    # Upon selection the argument is marked as True by the program and the logic below increases
     # the global logging accuracy all the way to DEBUG messages. If not selected the program follows
-    # the default behavior of showing only INFO and above messages. 
+    # the default behavior of showing only INFO and above messages.
     file_handler = logging.FileHandler(filename=log_file)
     stdout_handler = logging.StreamHandler(stream=sys.stdout)
     stdout_handler.setFormatter(CustomFormatter())
