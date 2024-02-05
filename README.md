@@ -89,9 +89,18 @@ a decision that the device is good to be upgraded if you run anything but info o
 
 ## Gathering Info for Upgrades
 
+### Alive Test
+
+Alive test keeps testing the devices with Ping until they respond again. This is handy during those
+long moments when devices are, for instance, rebooting after an upgrade.
+
+```
+./lan_upgrade.py -I info -a
+```
+
 ### Check Control Connections
 
-Before anything make sure the device(s) is reachable by pinging it and SSH'ing into it. 
+Make sure the device(s) is reachable by pinging it and SSH'ing into it. 
 
 ```
 ./lan_upgrade.py -I info -r
@@ -226,6 +235,3 @@ But there could be times when you want to have the full debug capability enabled
 # Switch on the debug mode 
 ./lan_upgrade.py -I info -s -d
 ```
-
-## To Do
-- What if there is nothing to activate

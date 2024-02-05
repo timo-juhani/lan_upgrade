@@ -16,6 +16,7 @@ import getpass
 import logging
 import argparse
 import socket
+import time
 import netmiko
 import pyfiglet
 import pandas
@@ -102,6 +103,8 @@ def create_parser():
                         action="store_true")
     parser.add_argument("-r", "--reachability", help="Check for control connections.",
                         action="store_true")
+    parser.add_argument("-a", "--alive", help="Check which device(s) is alive.",
+                        action="store_true")
     parser.add_argument("-c", "--convert", help="Convert from BUNDLE to INSTALL mode",
                         action="store_true")
     parser.add_argument("-d", "--debug", help="Run in debug mode", action="store_true")
@@ -160,7 +163,7 @@ def check_control_connection(device, username, password):
     logging.info("%s - Checking control connection.", device["name"])
     logging.info("%s - Pinging the device.", device["name"])
 
-    # Run a simple OS command to ping the device once. Send the stdout to bin. 
+    # Run a simple OS command to ping the device once. Send the stdout to bin.
     ping_response = os.system(f"ping -c 1 {device['ipaddr']} > /dev/null 2>&1")
 
     # If the response is null the device responded. Else the ping test failed and the program stops.
@@ -177,6 +180,25 @@ def check_control_connection(device, username, password):
     net_connect = open_connection(device, username, password)
     net_connect.disconnect()
     logging.info("%s - Control connection OK!", device["name"])
+
+def check_device_alive(inventory):
+    """
+    Checks which devices are alive until user decides to interrupt it with CTRL+C.
+    """
+    logging.info("Checking which devices are alive.")
+    try:
+        # Loop until user breaks out with CTRL+C.
+        while True:
+            for hostname, device in inventory.items():
+                # Send one ping to each device. 
+                ping_response = os.system(f"ping -c 1 {device['ipaddr']} > /dev/null 2>&1")
+                if ping_response == 0:
+                    logging.info("%s - Responds to ping.", hostname)
+                else:
+                    logging.error("%s - Doesn't respond to ping.", hostname)
+                time.sleep(2)
+    except KeyboardInterrupt:
+        pass
 
 @exception_handler_inventory
 def print_inventory(inventory_file):
@@ -708,6 +730,10 @@ def operation_logic(args, inventory, username, password, inventory_file):
     # Info switch that checks the condition of control connection to device(s)
     elif args.operation == "info" and args.reachability is True:
         run_multithreaded(check_control_connection, inventory, username, password)
+
+    # Info switch that checks the condition of control connection to device(s)
+    elif args.operation == "info" and args.alive is True:
+        check_device_alive(inventory)
 
     # Info operaton requires a switch -> give a pointer to the user.
     elif args.operation == "info":
