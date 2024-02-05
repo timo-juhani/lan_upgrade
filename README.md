@@ -1,6 +1,6 @@
 # LAN Upgrade
 
-## Introduction
+## 1. Introduction
 
 How many times you work with networks that are outright insecure, vulnerable and unpatched? 
 How often do you hear any of these:\
@@ -26,14 +26,14 @@ The design requirements for the project have been:
 - Any user with some networking and Linux shell experience should be able to adopt this tool
   quickly.
 
-## Prerequisites
+## 2. Prerequisites
 
 - Devices can be accessed with SSH using admin credentials.
 - All devices must be in INSTALL mode, if not conversion from BUNDLE must be done.
 - Python packages (pip install -r requirements.txt).
 - Tested on Catalyst 9000 family with IOS-XE 17.x software.
 
-## Working with Devices
+## 3. Working with Devices
 
 There are two ways to work with the program: 1) inventory mode and 2) HOST mode. The first one uses
 a .csv file called inventory.csv resides in the folder root by default. Both ways are fairly easy to
@@ -41,7 +41,7 @@ work with. The second one i.e. HOST mode accepts device parameters as shell argu
 if you are only dealing with a single device and/or don't care about managing a separate inventory 
 files. 
 
-### Credentials
+### 3.1 Credentials
 
 SSH username:password combination is used. It can be either provided as a shell argument (raw or 
 env variable for isntance) or as a user input while the program runs. 
@@ -50,7 +50,7 @@ env variable for isntance) or as a user input while the program runs.
 ./lan_upgrade.py -u admin -p pass123 -I activate
 ```
 
-### Inventory Mode
+### 3.2 Inventory Mode
 
 In inventory mode you just punch in the device parameters in .csv format (please see the sample) and
 let the code rely on them. Parameters required are the ones you probably expected:
@@ -70,7 +70,7 @@ let the code rely on them. Parameters required are the ones you probably expecte
 ./lan_upgrade.py -I activate
 ```
 
-### HOST Mode
+### 3.3 HOST Mode
 
 In HOST mode you just provide same parameters as in inventory mode but the method of doing that is 
 via shell intead of using inventory.csv. The only difference is that in HOST mode there is no 
@@ -87,9 +87,9 @@ a decision that the device is good to be upgraded if you run anything but info o
 ./lan_upgrade.py -H sdn-e30 -O cisco_xe -S cat9k_lite_iosxe.17.09.04a.SPA.bin -T 10.1.106.11 info -s
 ```
 
-## Gathering Info for Upgrades
+## 4. Gathering Info for Upgrades
 
-### Alive Test
+### 4.1 Alive Test
 
 Alive test keeps testing the devices with Ping until they respond again. This is handy during those
 long moments when devices are, for instance, rebooting after an upgrade.
@@ -98,7 +98,7 @@ long moments when devices are, for instance, rebooting after an upgrade.
 ./lan_upgrade.py -I info -a
 ```
 
-### Check Control Connections
+### 4.2 Check Control Connections
 
 Make sure the device(s) is reachable by pinging it and SSH'ing into it. 
 
@@ -106,7 +106,7 @@ Make sure the device(s) is reachable by pinging it and SSH'ing into it.
 ./lan_upgrade.py -I info -r
 ```
 
-### Check Devices in Bundle Mode
+### 4.3 Check Devices in Bundle Mode
 
 Devices that are in bundle mode should be migrated to install mode prior to trying to upgrade them.
 Using the info operation together with bundle flag it's easy to scan through the inventory and 
@@ -120,7 +120,7 @@ figure out which devices needs to be coverted.
 ./lan_upgrade.py -H sdn-e30 -O cisco_xe -S cat9k_lite_iosxe.17.09.04a.SPA.bin -T 10.1.106.11 info -b
 ```
 
-### Check Devices That Require Upgrade
+### 4.4 Check Devices That Require Upgrade
 
 Next, you'd like to know which devices need to be upgraded and which ones are already on the target
 version. Using the info operation with scan software flag is the way to answer to that question. 
@@ -137,7 +137,7 @@ enough knowledge to select devices that you'd like to upgrade by marking the upg
 ./lan_upgrade.py -H sdn-e30 -O cisco_xe -S cat9k_lite_iosxe.17.09.04a.SPA.bin -T 10.1.106.11 info -s
 ```
 
-## Cleaning Flash
+## 5. Cleaning Flash
 
 Before trying to upgrade it's a good idea to check whether the devices are crammed with old unused 
 versions that can be safely removed.
@@ -146,14 +146,14 @@ versions that can be safely removed.
 ./lan_upgrade -I clean
 ```
 
-## Upgrade
+## 6. Upgrade
 
 **Warning: Upgrade is a disruptive operation!**
 
 Think, plan, pause and execute only if the maintenance has been scheduled. 
 So don't go el pistolero. Don't be a cowboy. 
 
-### Staged Install 
+### 6.1 Staged Install 
 
 This is the most controlled approach that offers multiple points of return and none of them is 
 ROMMON. In most case you would prefer to do upgrades using staging because it allows the upgrade
@@ -192,6 +192,10 @@ or you made a mistake there are two courses of action:
 # Warning: This cause the device to reboot
 ./lan_upgrade.py -I activate
 
+# While the devices are rebooting use alive check to see when they come up again.
+./lan_upgrade.py -I info -a
+./lan_upgrade.py -I info -r
+
 # Commits the activated image.
 ./lan_upgrade.py -I commit
 
@@ -201,7 +205,7 @@ or you made a mistake there are two courses of action:
 ./lan_upgrade.py -H sdn-e30 -O cisco_xe -S cat9k_lite_iosxe.17.09.04a.SPA.bin -T 10.1.106.11 commit
 ```
 
-### One-Shot Install (No Questions Asked)
+### 6.2 One-Shot Install (No Questions Asked)
 
 OK, so I warned about the risks of trying to be a hero and getting after that badge of honor by 
 cracking off rounds with your pistol. Plan your updates correctly and reload your devices in pre-
@@ -226,7 +230,7 @@ the program when doing the coversion from bundle mode to install mode.
 ./lan_upgrade.py -I full-install
 ```
 
-## Troubleshooting
+## 7. Troubleshooting
 
 The program sends logs to stdout and application.log file. The default logging level is set to info.
 But there could be times when you want to have the full debug capability enabled. 
