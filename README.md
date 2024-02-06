@@ -35,11 +35,37 @@ The design requirements for the project are:
 
 ## 2. Prerequisites
 
+### 2.1 Notes
+
 - Devices can be accessed with SSH using admin credentials.
 - All devices must be in INSTALL mode, if not conversion from BUNDLE must be done. The program has 
   an operation for that.
 - Python packages (pip install -r requirements.txt).
-- Tested on Catalyst 9000 family with IOS-XE 17.x software.
+- Tested on Catalyst 9000 family with IOS-XE 17.x software. However, it's quite likely it works well
+  on Catalyst 8000 router family as well.
+
+### 2.2 Installation
+
+```
+# Get the code.
+git clone https://github.com/timo-juhani/lan_upgrade.git
+
+# Check that Python is installed.
+python -V
+
+# Install pip and venv.
+sudo apt install python3-pip
+pip install virtualenv
+
+# Create a virtual environment.
+python -m venv lan-upgrade
+
+# Activate virtual environment.
+source lan-upgrade/bin/activate
+
+# Install required packages.
+pip install -r requirements.txt
+```
 
 ## 3. Working with Devices
 
