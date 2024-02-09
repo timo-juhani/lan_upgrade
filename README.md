@@ -1,5 +1,7 @@
 # LAN Upgrade
 
+[![published](https://static.production.devnetcloud.com/codeexchange/assets/images/devnet-published.svg)](https://developer.cisco.com/codeexchange/github/repo/timo-juhani/lan_upgrade)
+
 ## 1. Introduction
 
 How many times you have worked with networks that are outright insecure, vulnerable and unpatched? 
