@@ -59,6 +59,19 @@ source lan-upgrade/bin/activate
 pip install -r requirements.txt
 ```
 
+### 2.3 Installation with Docker
+
+Sometimes it's a pain in the butt to deal with all Linux and Python dependencies. Especially so if you're using the program without Internet connectivity. In those case Docker image becomes handy. You can build you Docker image (or )
+
+```
+# Build the image.
+docker build -t lan-upgrade .
+
+# Confirm.
+docker images
+docker run lan-upgrade -h
+```
+
 ## 3. Working with Devices
 
 There are two ways to work with the program: 1) inventory mode and 2) HOST mode. The first one uses a .csv file called inventory.csv which resides in the folder root by default. Both ways are fairly easy to work with. The second one i.e. HOST mode accepts device parameters as shell arguments which is handy if you are only dealing with a single device and/or don't care about managing a separate inventory file. 
@@ -236,6 +249,19 @@ The program sends logs to stdout and application.log file. The default logging l
 ```
 # Switch on the debug mode 
 ./lan_upgrade.py -I info -s -d
+```
+
+## 9. Working with Docker
+
+As mentioned before it is handy have Docker as an option in those environments with limited network access to public resources such as Linux package repositories or PyPI. Using the program with Docker is quite simple but it requires some considerations in regards to networking and storage. 
+
+```
+# The container is run like this. 
+# -it flags runs the container with interactive shell which allows entering username and password.
+# --network flag sets the container network which allows the container to join a VPN tunnel in case it's used.
+# -v (--volume) flag sets the container volume to publish SW images and inventory to the container. 
+# After that the execution is similar to the shell program. Dockerfile sets the entrypoint on the program. 
+docker run -it --network=host -v ${PWD}:/lan-upgrade/ lan-upgrade -I info -s
 ```
 
 ## Afterword
