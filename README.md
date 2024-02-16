@@ -61,7 +61,7 @@ pip install -r requirements.txt
 
 ### 2.3 Installation with Docker
 
-Sometimes it's a pain in the butt to deal with all Linux and Python dependencies. Especially so if you're using the program without Internet connectivity. In those case Docker image becomes handy. You can build you Docker image (or )
+Sometimes it's a pain in the butt to deal with all Linux and Python dependencies. Especially so if you're using the program without Internet connectivity. In those case Docker image becomes handy. To bypass this via dolorosa build yourself a container that is easy to port between hosts regardless of Internet access.
 
 ```
 # Build the image.
