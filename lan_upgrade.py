@@ -7,7 +7,7 @@ Upgrade modern IOS-XE switches in parallel.
 __author__ = "Timo-Juhani Karjalinen (@timo-juhani)"
 __copyright__ = "Copyright (c) 2024 Timo-Juhani Karjalainen"
 __license__ = "MIT"
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 __email__ = "tkarjala@cisco.com"
 __status__ = "Prototype"
 
