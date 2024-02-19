@@ -8,7 +8,7 @@ future==0.18.3
 isort==5.13.2
 mccabe==0.7.0
 netmiko==4.3.0
-ntc_templates==4.0.1
+ntc_templates==4.3.0
 numpy==1.26.4
 ordered-set==4.1.0
 packaging==23.2
