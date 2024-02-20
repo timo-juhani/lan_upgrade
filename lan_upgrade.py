@@ -42,14 +42,14 @@ class CustomFormatter(logging.Formatter):
     red = '\x1b[38;5;196m'
     bold_red = '\x1b[31;1m'
     reset = '\x1b[0m'
-    format = "%(asctime)s - %(levelname)s - %(message)s"
+    log_format = "%(asctime)s - %(levelname)s - %(message)s"
 
     FORMATS = {
-        logging.DEBUG: grey + format + reset,
-        logging.INFO: grey + format + reset,
-        logging.WARNING: yellow + format + reset,
-        logging.ERROR: red + format + reset,
-        logging.CRITICAL: bold_red + format + reset
+        logging.DEBUG: grey + log_format + reset,
+        logging.INFO: grey + log_format + reset,
+        logging.WARNING: yellow + log_format + reset,
+        logging.ERROR: red + log_format + reset,
+        logging.CRITICAL: bold_red + log_format + reset
     }
 
     def format(self, record):
@@ -197,7 +197,7 @@ def check_device_alive(inventory):
         # Loop until user breaks out with CTRL+C.
         while True:
             for hostname, device in inventory.items():
-                # Send one ping to each device. 
+                # Send one ping to each device.
                 ping_response = os.system(f"ping -c 1 {device['ipaddr']} > /dev/null 2>&1")
                 if ping_response == 0:
                     logging.info("%s - Responds to ping.", hostname)
