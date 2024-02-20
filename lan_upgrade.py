@@ -7,7 +7,7 @@ Upgrade modern IOS-XE switches in parallel.
 __author__ = "Timo-Juhani Karjalinen (@timo-juhani)"
 __copyright__ = "Copyright (c) 2024 Timo-Juhani Karjalainen"
 __license__ = "MIT"
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 __email__ = "tkarjala@cisco.com"
 __status__ = "Prototype"
 
@@ -24,9 +24,9 @@ import logging
 import argparse
 import socket
 import time
+import csv
 import netmiko
 import pyfiglet
-import pandas
 import termcolor
 
 
@@ -210,13 +210,37 @@ def check_device_alive(inventory):
 @exception_handler_inventory
 def print_inventory(inventory_file):
     """
-    Prints the contents of the inventory.csv to the console.
+    Prints the contents of the inventory.csv to stdout in a user-friendly format.
     """
-    print("\nInventory:\n")
-    # Print the content of the inventory file.
+    # Read the content of the inventory file.
     with open(inventory_file, newline='', encoding='utf-8') as csvfile:
-        print(pandas.read_csv(csvfile))
-        print("\n")
+        csv_reader = csv.reader(csvfile)
+
+        # Read the headers separately
+        headers = next(csv_reader)
+
+        # Find the maximum width for each column
+        max_widths = [max(len(cell) for cell in col) for col in zip(headers, *csv_reader)]
+
+        # Reset the file pointer to read from the beginning
+        csvfile.seek(0)
+        next(csv_reader)  # Skip the header row
+
+        # Print headers
+        for i, header in enumerate(headers):
+            print(f"{header.ljust(max_widths[i])}", end="\t")
+        print()  # Newline after headers
+
+        # Print separator line
+        print("-" * 130)
+
+        # Print the data rows
+        for row in csv_reader:
+            for i, cell in enumerate(row):
+                print(f"{cell.ljust(max_widths[i])}", end="\t")
+            print()  # Newline after each row
+    print()
+
 
 @exception_handler_inventory
 def read_inventory(inventory_file):
