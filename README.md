@@ -34,7 +34,7 @@ The design requirements for the project are:
 - All devices must be in INSTALL mode, if not conversion from BUNDLE must be done. The program has an operation for that.
 - Python version 3.10.12 or above.
 - Python packages (pip install -r requirements.txt).
-- Tested on Catalyst 9000 family with IOS-XE 17.x software. However, it's quite likely it works well on Catalyst 8000 router family as well.
+- Tested on Catalyst 9000 switch and Catalyst 8000 router family with IOS-XE 17.x software.
 
 ### 2.2 Installation
 
